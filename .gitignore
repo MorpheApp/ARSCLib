@@ -4,3 +4,14 @@
 /test-apk/
 /src/main/java/zorg/
 /gradle/wrapper/gradle-wrapper.properties
+/.idea/.gitignore
+/.idea/AndroidProjectSystem.xml
+/.idea/compiler.xml
+/.idea/caches/deviceStreaming.xml
+/.idea/gradle.xml
+/local.properties
+/.idea/markdown.xml
+/.idea/migrations.xml
+/.idea/misc.xml
+/.idea/runConfigurations.xml
+/.idea/vcs.xml
