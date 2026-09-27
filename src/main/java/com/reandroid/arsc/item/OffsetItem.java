@@ -24,6 +24,7 @@ import com.reandroid.utils.HexUtil;
 import com.reandroid.utils.ObjectsUtil;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 public abstract class OffsetItem extends BlockItem implements DirectStreamReader,
         Comparable<OffsetItem> {
@@ -35,13 +36,81 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
     public static final Creator<OffsetItem> CREATOR_OFFSET32 = Helper.init32();
     public static final Creator<OffsetItem> CREATOR_SPARSE = Helper.initSparse();
 
+    /*
+     * Offsets exist once per entry and per string of every table, so the value is kept
+     * only in fields and encoded on demand instead of backing each item with its own
+     * byte array.
+     */
     private int mOffset;
 
-    protected OffsetItem(int bytesLength) {
-        super(bytesLength);
-    }
     protected OffsetItem() {
-        this(4);
+        super(0);
+    }
+
+    /** The encoded size, 2 or 4 bytes */
+    abstract int bytesLength();
+    /** Encodes the current values into <code>bytes</code> of {@link #bytesLength()} */
+    abstract void encode(byte[] bytes);
+    /** Decodes values from <code>bytes</code> of {@link #bytesLength()} */
+    abstract void decode(byte[] bytes);
+
+    private byte[] encode() {
+        byte[] bytes = new byte[bytesLength()];
+        encode(bytes);
+        return bytes;
+    }
+    @Override
+    protected byte[] getBytesInternal() {
+        return encode();
+    }
+    @Override
+    void setBytesInternal(byte[] bytes, boolean notify) {
+        if (bytes == null || bytes.length < bytesLength()) {
+            byte[] update = new byte[bytesLength()];
+            if (bytes != null) {
+                System.arraycopy(bytes, 0, update, 0, bytes.length);
+            }
+            bytes = update;
+        }
+        decode(bytes);
+    }
+    @Override
+    int getBytesLength() {
+        return bytesLength();
+    }
+    @Override
+    public int countBytes() {
+        if (isNull()) {
+            return 0;
+        }
+        return bytesLength();
+    }
+    @Override
+    public void onReadBytes(BlockReader reader) throws IOException {
+        byte[] bytes = new byte[bytesLength()];
+        reader.readFully(bytes);
+        decode(bytes);
+    }
+    @Override
+    public int readBytes(InputStream inputStream) throws IOException {
+        byte[] bytes = new byte[bytesLength()];
+        int length = bytes.length;
+        int offset = 0;
+        int read = length;
+        while (length > 0 && read > 0) {
+            read = inputStream.read(bytes, offset, length);
+            length -= read;
+            offset += read;
+        }
+        decode(bytes);
+        super.notifyBlockLoad();
+        return offset;
+    }
+    @Override
+    public void setBytes(BlockItem blockItem) {
+        if (blockItem != this) {
+            setBytesInternal(blockItem.getBytesInternal(), true);
+        }
     }
 
     public int getOffset() {
@@ -49,9 +118,12 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
     }
     public void setOffset(int offset) {
         if (offset != mOffset) {
-            writeOffset(offset);
+            validateOffset(offset);
             mOffset = offset;
         }
+    }
+    void setOffsetInternal(int offset) {
+        this.mOffset = offset;
     }
 
     public int getIdx() {
@@ -60,13 +132,8 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
     public void setIdx(int idx) {
     }
 
-    protected abstract int readOffset();
-    protected abstract void writeOffset(int offset);
-
-    @Override
-    protected void onBytesChanged() {
-        super.onBytesChanged();
-        this.mOffset = readOffset();
+    /** Rejects a value that cannot be encoded, before it is set */
+    protected void validateOffset(int offset) {
     }
 
     public boolean isNoEntry() {
@@ -157,29 +224,39 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
     static class Offset16 extends OffsetItem {
 
         public Offset16() {
-            super(2);
+            super();
         }
 
         @Override
-        protected int readOffset() {
-            int offset = getShortUnsigned(getBytesInternal(), 0);
-            if (offset == NO_ENTRY16) {
-                offset = NO_ENTRY;
+        int bytesLength() {
+            return 2;
+        }
+        @Override
+        void encode(byte[] bytes) {
+            int value = getOffset();
+            if (value == NO_ENTRY) {
+                value = NO_ENTRY16;
             } else {
-                offset = offset * 4;
+                value = value / 4;
             }
-            return offset;
+            putShort(bytes, 0, value);
+        }
+        @Override
+        void decode(byte[] bytes) {
+            int value = getShortUnsigned(bytes, 0);
+            if (value == NO_ENTRY16) {
+                value = NO_ENTRY;
+            } else {
+                value = value * 4;
+            }
+            setOffsetInternal(value);
         }
 
         @Override
-        protected void writeOffset(int offset) {
-            if (offset == NO_ENTRY) {
-                offset = NO_ENTRY16;
-            } else {
-                offset = offset / 4;
-                validateValueRange(offset);
+        protected void validateOffset(int offset) {
+            if (offset != NO_ENTRY) {
+                validateValueRange(offset / 4);
             }
-            putShort(getBytesInternal(), 0, offset);
         }
 
         @Override
@@ -196,14 +273,18 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         }
 
         @Override
-        protected int readOffset() {
-            return getInteger(getBytesInternal(), 0);
+        int bytesLength() {
+            return 4;
+        }
+        @Override
+        void encode(byte[] bytes) {
+            putInteger(bytes, 0, getOffset());
+        }
+        @Override
+        void decode(byte[] bytes) {
+            setOffsetInternal(getInteger(bytes, 0));
         }
 
-        @Override
-        protected void writeOffset(int offset) {
-            putInteger(getBytesInternal(), 0, offset);
-        }
         @Override
         public int compareTo(OffsetItem offsetItem) {
             return compareIdx(offsetItem);
@@ -219,6 +300,21 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         }
 
         @Override
+        int bytesLength() {
+            return 4;
+        }
+        @Override
+        void encode(byte[] bytes) {
+            putShort(bytes, 0, mIdx);
+            putShort(bytes, 2, getOffset() / 4);
+        }
+        @Override
+        void decode(byte[] bytes) {
+            this.mIdx = getShortUnsigned(bytes, 0);
+            setOffsetInternal(getShortUnsigned(bytes, 2) * 4);
+        }
+
+        @Override
         public int getIdx() {
             return mIdx;
         }
@@ -228,7 +324,6 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
             if (idx != mIdx) {
                 validateValueRange(idx);
                 this.mIdx = idx;
-                putShort(getBytesInternal(), 0, idx);
             }
         }
         @Override
@@ -237,21 +332,8 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         }
 
         @Override
-        protected void onBytesChanged() {
-            super.onBytesChanged();
-            this.mIdx = getShortUnsigned(getBytesInternal(), 0);
-        }
-
-        @Override
-        protected int readOffset() {
-            return getShortUnsigned(getBytesInternal(), 2) * 4;
-        }
-
-        @Override
-        protected void writeOffset(int offset) {
-            int value = offset / 4;
-            validateValueRange(value);
-            putShort(getBytesInternal(), 2, value);
+        protected void validateOffset(int offset) {
+            validateValueRange(offset / 4);
         }
 
         @Override
