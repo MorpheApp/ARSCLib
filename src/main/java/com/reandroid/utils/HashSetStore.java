@@ -21,9 +21,11 @@ import com.reandroid.utils.collection.FilterIterator;
 import com.reandroid.utils.collection.InstanceIterator;
 import com.reandroid.utils.collection.SingleIterator;
 
+import java.util.AbstractSet;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.function.Predicate;
 
 
@@ -31,7 +33,7 @@ import java.util.function.Predicate;
  * A utility class to hold few non-null objects, the main purpose is to minimize new HashSet class creation.
  *    <br />If no entries, the container will be null.
  *    <br />If one entry, the container will become entry itself.
- *    <br />If more than one entry, HashSet class will be created and becomes the container.
+ *    <br />If more than one entry, a compact hash set is created and becomes the container.
  * */
 
 public class HashSetStore {
@@ -267,36 +269,195 @@ public class HashSetStore {
         return set;
     }
 
-    static final class ObjectsSet extends HashSet<Object> {
+    /**
+     * Open addressing (linear probing) hash set. The containers here hold the
+     * references of every string / spec string of a resource table, so per element
+     * overhead matters: a HashSet costs a 32 byte node per element plus its table,
+     * this costs one array slot.
+     */
+    static final class ObjectsSet extends AbstractSet<Object> {
+        private static final int MIN_CAPACITY = 4;
+
+        private Object[] table;
+        private int size;
 
         ObjectsSet() {
-            super();
+            this.table = new Object[MIN_CAPACITY];
         }
         ObjectsSet(Object[] elements) {
-            super(elements.length);
-            for (Object obj : elements) {
-                add(obj);
-            }
+            this.table = new Object[capacityFor(elements.length)];
+            addAll(elements);
         }
         ObjectsSet(Collection<?> collection) {
-            super(collection);
+            this.table = new Object[capacityFor(collection.size())];
+            addAll(collection);
         }
 
+        private static int capacityFor(int count) {
+            int capacity = MIN_CAPACITY;
+            // keep the load factor at or below 3/4
+            while (capacity - (capacity >>> 2) < count) {
+                capacity = capacity << 1;
+            }
+            return capacity;
+        }
+        private static int indexFor(Object element, int mask) {
+            int h = element.hashCode() * 0x9E3779B9;
+            return (h ^ (h >>> 16)) & mask;
+        }
+        /**
+         * @return the slot holding <code>element</code>, or <code>-(slot + 1)</code> of the
+         * empty slot where it would go
+         */
+        private int find(Object element) {
+            Object[] table = this.table;
+            int mask = table.length - 1;
+            int i = indexFor(element, mask);
+            Object existing;
+            while ((existing = table[i]) != null) {
+                if (existing == element || existing.equals(element)) {
+                    return i;
+                }
+                i = (i + 1) & mask;
+            }
+            return -(i + 1);
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+        @Override
+        public boolean contains(Object o) {
+            return o != null && find(o) >= 0;
+        }
+        /** Null is ignored, as {@link HashSetStore} never holds it */
+        @Override
+        public boolean add(Object element) {
+            if (element == null) {
+                return false;
+            }
+            int i = find(element);
+            if (i >= 0) {
+                return false;
+            }
+            Object[] table = this.table;
+            table[-i - 1] = element;
+            size ++;
+            if (size > table.length - (table.length >>> 2)) {
+                resize(table.length << 1);
+            }
+            return true;
+        }
+        private void resize(int capacity) {
+            Object[] old = this.table;
+            Object[] table = new Object[capacity];
+            int mask = capacity - 1;
+            for (Object element : old) {
+                if (element != null) {
+                    int i = indexFor(element, mask);
+                    while (table[i] != null) {
+                        i = (i + 1) & mask;
+                    }
+                    table[i] = element;
+                }
+            }
+            this.table = table;
+        }
+        @Override
+        public boolean remove(Object o) {
+            int i = o == null ? -1 : find(o);
+            if (i < 0) {
+                return false;
+            }
+            Object[] table = this.table;
+            int mask = table.length - 1;
+            table[i] = null;
+            size --;
+            // shift back the following run so lookups never hit a gap
+            int j = i;
+            while (true) {
+                j = (j + 1) & mask;
+                Object element = table[j];
+                if (element == null) {
+                    break;
+                }
+                int k = indexFor(element, mask);
+                boolean stays = (i <= j) ? (i < k && k <= j) : (i < k || k <= j);
+                if (!stays) {
+                    table[i] = element;
+                    table[j] = null;
+                    i = j;
+                }
+            }
+            return true;
+        }
+        @Override
+        public void clear() {
+            Arrays.fill(this.table, null);
+            this.size = 0;
+        }
+        @Override
+        public Object[] toArray() {
+            Object[] result = new Object[size];
+            Object[] table = this.table;
+            int index = 0;
+            for (Object element : table) {
+                if (element != null) {
+                    result[index++] = element;
+                }
+            }
+            return result;
+        }
+        @Override
+        public Iterator<Object> iterator() {
+            return new SlotIterator(table);
+        }
+        /**
+         * Yields the occupied slots. Not an {@link ArrayIterator}, which would report the
+         * table capacity as its size and make callers pre-size for empty slots.
+         */
+        private static final class SlotIterator implements Iterator<Object> {
+            private final Object[] slots;
+            private int position;
+
+            SlotIterator(Object[] slots) {
+                this.slots = slots;
+                this.position = next(0);
+            }
+            private int next(int i) {
+                Object[] slots = this.slots;
+                while (i < slots.length && slots[i] == null) {
+                    i ++;
+                }
+                return i;
+            }
+            @Override
+            public boolean hasNext() {
+                return position < slots.length;
+            }
+            @Override
+            public Object next() {
+                int i = this.position;
+                if (i >= slots.length) {
+                    throw new NoSuchElementException();
+                }
+                this.position = next(i + 1);
+                return slots[i];
+            }
+        }
         public<T> Iterator<T> iterator(Class<? extends T> instance) {
             return ObjectsUtil.cast(InstanceIterator.of(iterator(), instance));
         }
-
         public Object getFirst() {
             if (!isEmpty()) {
                 return iterator().next();
             }
             return null;
         }
-
         public Iterator<Object> clonedIterator() {
             return ArrayIterator.of(toArray());
         }
-
         public void addAll(Iterator<?> iterator) {
             while (iterator.hasNext()) {
                 add(iterator.next());
