@@ -35,6 +35,7 @@ public class ZipFileOutput extends ZipOutput{
         return file;
     }
     public void write(FileChannel input, long length) throws IOException{
+        flushOutputStream();
         FileChannel fileChannel = getFileChannel();
         long pos = fileChannel.position();
 
@@ -52,16 +53,19 @@ public class ZipFileOutput extends ZipOutput{
 
     @Override
     public long position() throws IOException {
+        flushOutputStream();
         return getFileChannel().position();
     }
     @Override
     public void position(long pos) throws IOException {
+        flushOutputStream();
         getFileChannel().position(pos);
     }
     @Override
     public void close() throws IOException {
         FileChannel fileChannel = this.fileChannel;
         if(fileChannel != null){
+            flushOutputStream();
             fileChannel.close();
         }
     }
@@ -87,6 +91,7 @@ public class ZipFileOutput extends ZipOutput{
 
     @Override
     public void write(InputStream inputStream) throws IOException {
+        flushOutputStream();
         FileChannel fileChannel = getFileChannel();
         long pos = fileChannel.position();
         int bufferLength = 1024 * 1000 * 10;
@@ -111,6 +116,12 @@ public class ZipFileOutput extends ZipOutput{
         return outputStream;
     }
 
+    private void flushOutputStream() throws IOException {
+        FileChannelOutputStream outputStream = this.outputStream;
+        if(outputStream != null){
+            outputStream.flush();
+        }
+    }
 
     private static void initFile(File file) throws IOException{
         if(file.isDirectory()){
