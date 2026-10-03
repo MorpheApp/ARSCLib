@@ -22,8 +22,11 @@ import java.nio.channels.FileChannel;
 
 public class FileChannelOutputStream extends OutputStream {
     private final FileChannel fileChannel;
+    private final ByteBuffer buffer;
+
     public FileChannelOutputStream(FileChannel fileChannel){
         this.fileChannel = fileChannel;
+        this.buffer = ByteBuffer.allocate(BUFFER_SIZE);
     }
     @Override
     public void write(byte[] bytes) throws IOException {
@@ -31,17 +34,48 @@ public class FileChannelOutputStream extends OutputStream {
     }
     @Override
     public void write(byte[] bytes, int offset, int length) throws IOException {
-        long position = fileChannel.position();
-        length = fileChannel.write(ByteBuffer.wrap(bytes, offset, length));
-        fileChannel.position(position + length);
+        ByteBuffer buffer = this.buffer;
+        if(length > buffer.remaining()){
+            flush();
+            if(length >= buffer.capacity()){
+                writeFully(ByteBuffer.wrap(bytes, offset, length));
+                return;
+            }
+        }
+        buffer.put(bytes, offset, length);
     }
     @Override
     public void write(int i) throws IOException {
-        byte b = (byte) (i & 0xff);
-        write(new byte[]{b});
+        ByteBuffer buffer = this.buffer;
+        if(!buffer.hasRemaining()){
+            flush();
+        }
+        buffer.put((byte) i);
+    }
+    /**
+     * Writes the buffered bytes to the channel at its current position.
+     * Must be called before the channel is used directly.
+     */
+    @Override
+    public void flush() throws IOException {
+        ByteBuffer buffer = this.buffer;
+        if(buffer.position() == 0){
+            return;
+        }
+        buffer.flip();
+        writeFully(buffer);
+        buffer.clear();
+    }
+    private void writeFully(ByteBuffer byteBuffer) throws IOException {
+        FileChannel fileChannel = this.fileChannel;
+        while (byteBuffer.hasRemaining()){
+            fileChannel.write(byteBuffer);
+        }
     }
     @Override
-    public void close(){
-
+    public void close() throws IOException {
+        flush();
     }
+
+    private static final int BUFFER_SIZE = 64 * 1024;
 }

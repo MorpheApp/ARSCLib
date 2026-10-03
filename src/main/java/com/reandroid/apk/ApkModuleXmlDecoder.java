@@ -24,6 +24,7 @@ import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.chunk.xml.ResXmlDocument;
 import com.reandroid.arsc.coder.xml.XmlCoder;
 import com.reandroid.arsc.list.OverlayableList;
+import com.reandroid.utils.io.FileUtil;
 import com.reandroid.utils.io.IOUtil;
 import com.reandroid.arsc.value.*;
 import com.reandroid.json.JSONObject;
@@ -31,9 +32,17 @@ import com.reandroid.xml.XMLFactory;
 import com.reandroid.xml.XmlIndentingSerializer;
 import org.xmlpull.v1.XmlSerializer;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.OutputStream;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<Entry> {
@@ -91,15 +100,22 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
             logMessage("Res files: " + TableBlock.DIRECTORY_NAME);
         }
         List<ResFile> resFileList = getApkModule().listResFiles();
-        for(ResFile resFile:resFileList){
-            decodeResFile(mainDirectory, resFile);
+        ResFileWriter resFileWriter = new ResFileWriter();
+        try{
+            for(ResFile resFile:resFileList){
+                decodeResFile(mainDirectory, resFile, resFileWriter);
+            }
+        }catch (IOException | RuntimeException exception){
+            resFileWriter.abort();
+            throw exception;
         }
+        resFileWriter.finish();
     }
-    private void decodeResFile(File mainDirectory, ResFile resFile)
+    private void decodeResFile(File mainDirectory, ResFile resFile, ResFileWriter resFileWriter)
             throws IOException{
         if(resFile.isBinaryXml()){
             try{
-                decodeResXml(mainDirectory, resFile);
+                decodeResXml(mainDirectory, resFile, resFileWriter);
             }catch (Exception ex){
                 logOrThrow("Failed to decode: "
                         + resFile.getFilePath(), ex);
@@ -111,9 +127,9 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
             logMessage("Ignore non bin xml: " + path);
             return;
         }
-        decodeResRaw(mainDirectory, resFile);
+        decodeResRaw(mainDirectory, resFile, resFileWriter);
     }
-    private void decodeResRaw(File mainDirectory, ResFile resFile)
+    private void decodeResRaw(File mainDirectory, ResFile resFile, ResFileWriter resFileWriter)
             throws IOException {
         Entry entry = resFile.pickOne();
         PackageBlock packageBlock = entry.getPackageBlock();
@@ -121,13 +137,13 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
         File file = toDecodeResFile(mainDirectory, resFile, packageBlock);
         InputSource inputSource = resFile.getInputSource();
         logVerbose(inputSource.getAlias());
-        inputSource.write(file);
+        resFileWriter.write(file, IOUtil.readFully(inputSource.openStream()));
         if(!keepResPath()){
             addDecodedEntry(entry);
         }
         addDecodedPath(inputSource.getAlias());
     }
-    private void decodeResXml(File mainDirectory, ResFile resFile)
+    private void decodeResXml(File mainDirectory, ResFile resFile, ResFileWriter resFileWriter)
             throws IOException{
         Entry entry = resFile.pickOne();
         PackageBlock packageBlock = entry.getPackageBlock();
@@ -136,7 +152,9 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
         InputSource inputSource = resFile.getInputSource();
 
         logVerbose(inputSource.getAlias());
-        serializeXml(packageBlock, resFile.getInputSource(), file);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        serializeXml(packageBlock, inputSource, outputStream);
+        resFileWriter.write(file, outputStream.toByteArray());
 
         if(!keepResPath()){
             addDecodedEntry(entry);
@@ -247,19 +265,23 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
     }
     private void serializeXml(PackageBlock packageBlock, ResXmlDocument document, File outFile)
             throws IOException {
+        serializeXml(packageBlock, document, FileUtil.outputStream(outFile));
+    }
+    private void serializeXml(PackageBlock packageBlock, ResXmlDocument document, OutputStream outputStream)
+            throws IOException {
         if(packageBlock != null && document.getPackageBlock() == null){
             document.setPackageBlock(packageBlock);
         }
-        XmlSerializer serializer = XMLFactory.newSerializer(outFile, document.getEncoding());
+        XmlSerializer serializer = XMLFactory.newSerializer(outputStream, document.getEncoding());
         document.serialize(serializer);
         IOUtil.close(serializer);
     }
-    private void serializeXml(PackageBlock packageBlock, InputSource inputSource, File outFile)
+    private void serializeXml(PackageBlock packageBlock, InputSource inputSource, OutputStream outputStream)
             throws IOException {
         ResXmlDocument document = new ResXmlDocument();
         document.readBytes(inputSource.openStream());
         document.setPackageBlock(packageBlock);
-        serializeXml(packageBlock, document, outFile);
+        serializeXml(packageBlock, document, outputStream);
     }
     private void addDecodedEntry(Entry entry){
         if(entry.isNull()){
@@ -307,5 +329,81 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
     @Override
     public boolean test(Entry entry) {
         return containsDecodedEntry(entry);
+    }
+
+    /**
+     * Writes decoded res files on background threads, as creating many small files is mostly
+     * time spent waiting on the file system. The contents are decoded by the caller because
+     * the table is not thread safe, so only the file writing is done in parallel.
+     */
+    private class ResFileWriter {
+        private static final int RES_FILE_WRITE_THREADS = 2; // TODO: Use number of device cores?
+        private static final int MAX_PENDING_WRITE_BYTES = 16 * 1024 * 1024;
+
+        private final ExecutorService executor;
+        private final Semaphore pendingBytes;
+        private final Set<File> createdDirectories;
+        private volatile File failedFile;
+        private volatile IOException failure;
+
+        ResFileWriter(){
+            this.executor = Executors.newFixedThreadPool(RES_FILE_WRITE_THREADS, runnable -> {
+                Thread thread = new Thread(runnable, "res-file-writer");
+                thread.setDaemon(true);
+                return thread;
+            });
+            this.pendingBytes = new Semaphore(MAX_PENDING_WRITE_BYTES);
+            this.createdDirectories = new HashSet<>();
+        }
+        void write(File file, byte[] bytes) throws IOException {
+            if(failure != null){
+                return;
+            }
+            File dir = file.getParentFile();
+            if(dir != null && createdDirectories.add(dir) && !dir.exists()){
+                dir.mkdirs();
+            }
+            // Limits the memory used by contents waiting to be written.
+            int permits = Math.min(Math.max(bytes.length, 1), MAX_PENDING_WRITE_BYTES);
+            try{
+                pendingBytes.acquire(permits);
+            }catch (InterruptedException exception){
+                Thread.currentThread().interrupt();
+                throw new InterruptedIOException("Interrupted writing: " + file);
+            }
+            executor.execute(() -> {
+                try(FileOutputStream outputStream = new FileOutputStream(file)){
+                    outputStream.write(bytes);
+                }catch (IOException exception){
+                    synchronized (this){
+                        if(failure == null){
+                            failedFile = file;
+                            failure = exception;
+                        }
+                    }
+                }finally {
+                    pendingBytes.release(permits);
+                }
+            });
+        }
+        void finish() throws IOException {
+            executor.shutdown();
+            try{
+                while (!executor.awaitTermination(1, TimeUnit.MINUTES)){
+                    logVerbose("Waiting for res files to be written ...");
+                }
+            }catch (InterruptedException exception){
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+                throw new InterruptedIOException("Interrupted writing res files");
+            }
+            IOException failure = this.failure;
+            if(failure != null){
+                logOrThrow("Failed to write: " + failedFile, failure);
+            }
+        }
+        void abort(){
+            executor.shutdownNow();
+        }
     }
 }
