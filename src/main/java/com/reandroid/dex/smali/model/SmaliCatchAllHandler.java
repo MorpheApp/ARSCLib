@@ -15,24 +15,31 @@
  */
 package com.reandroid.dex.smali.model;
 
-import com.reandroid.dex.debug.DebugElement;
-import com.reandroid.dex.debug.DebugElementType;
+import com.reandroid.dex.key.TypeKey;
 import com.reandroid.dex.program.InstructionLabelType;
 import com.reandroid.dex.smali.SmaliDirective;
 
-public abstract class SmaliDebugElement extends SmaliDebug implements DebugElement {
+public class SmaliCatchAllHandler extends SmaliExceptionHandler {
 
-    public SmaliDirective getSmaliDirective() {
-        return getDebugElementType().getSmaliDirective();
+    public SmaliCatchAllHandler(){
+        super();
     }
-    public abstract DebugElementType<?> getDebugElementType();
 
+    @Override
+    public SmaliDirective getSmaliDirective() {
+        return SmaliDirective.CATCH_ALL;
+    }
+
+    @Override
+    public boolean isCatchAll() {
+        return true;
+    }
+    @Override
+    public TypeKey getKey() {
+        return null;
+    }
     @Override
     public InstructionLabelType getLabelType() {
-        return InstructionLabelType.DEBUG;
-    }
-    @Override
-    public String getLabelName() {
-        return toSmaliString();
+        return InstructionLabelType.CATCH_ALL_HANDLER;
     }
 }

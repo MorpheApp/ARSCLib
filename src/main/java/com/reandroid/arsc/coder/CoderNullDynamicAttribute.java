@@ -13,31 +13,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.reandroid.dex.ins;
+package com.reandroid.arsc.coder;
 
-import com.reandroid.dex.program.InstructionLabelType;
+import com.reandroid.arsc.value.ValueType;
 
-public class InsSparseSwitch extends InsSwitch {
+public class CoderNullDynamicAttribute extends Coder {
 
-    public InsSparseSwitch() {
-        super(Opcode.SPARSE_SWITCH);
+    public CoderNullDynamicAttribute() {
+        super();
     }
 
     @Override
-    public InsSparseSwitchData getPayload() {
-        return (InsSparseSwitchData) super.getPayload();
-    }
-    @Override
-    public Opcode<InsSparseSwitchData> getPayloadOpcode() {
-        return Opcode.SPARSE_SWITCH_PAYLOAD;
+    public EncodeResult encode(String text) {
+        if (text.equals("??null")) {
+            return new EncodeResult(ValueType.ATTRIBUTE, 0);
+        }
+        return null;
     }
 
     @Override
-    public void setTargetAddress(int targetAddress){
-        setData(targetAddress - getAddress());
+    public String decode(int data) {
+        return data == 0 ? "??null" : null;
     }
+
     @Override
-    public InstructionLabelType getLabelType() {
-        return InstructionLabelType.S_SWITCH_DATA;
+    public ValueType getValueType() {
+        return ValueType.DYNAMIC_ATTRIBUTE;
     }
+
+    @Override
+    boolean canStartWith(char first) {
+        return first == '?';
+    }
+
+    public static final CoderNullDynamicAttribute INS = new CoderNullDynamicAttribute();
 }

@@ -905,6 +905,9 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         }
         boolean locked = mLocked;
         this.mLocked = true;
+        if (availableCapacity() == 0) {
+            ensureCapacity(calculateGrow());
+        }
         slideRight(i, 1);
         this.mElements[i] = item;
         notifyAdd(i, item);
@@ -976,6 +979,7 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         }
         boolean locked = mLocked;
         this.mLocked = true;
+        ensureCapacity(length);
         slideRight(index, length);
         Object[] elements = this.mElements;
         int i = index;
@@ -1026,12 +1030,7 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
     private void slideRight(int position, int amount){
         boolean locked = mLocked;
         this.mLocked = true;
-        if(availableCapacity() < amount){
-            // Grow by the usual step rather than by exactly 'amount', otherwise
-            // inserting n items one by one reallocates and copies the array n times
-            int grow = calculateGrow();
-            ensureCapacity(grow > amount ? grow : amount);
-        }
+        ensureCapacity(amount);
         Object[] elements = this.mElements;
         int size = this.size;
         int i = size - 1;
@@ -1085,6 +1084,9 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         }
         return new Object[length];
     }
+    public void ensureMinCapacity(int capacity) {
+        ensureCapacity(calculateGrow(capacity));
+    }
     private void ensureCapacity(){
         if(availableCapacity() > 0){
             return;
@@ -1095,15 +1097,13 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         if(capacity <= 0){
             return;
         }
-        capacity = capacity - availableCapacity();
-        if(capacity <= 0){
+        if(capacity - availableCapacity() <= 0){
             return;
         }
         int size = this.size;
-        Object[] elements = this.mElements;
-        // 'capacity' is what is still missing on top of the free slots
-        int length = elements.length + capacity;
+        int length = size + capacity;
         Object[] update = getNewArray(length);
+        Object[] elements = this.mElements;
         if(elements.length == 0 || size == 0){
             this.mElements = update;
             return;
@@ -1114,14 +1114,16 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
     public int availableCapacity(){
         return this.mElements.length - size;
     }
-
-    private int calculateGrow(){
-        if(this.size == 0){
-            return 1;
+    private int calculateGrow() {
+        return calculateGrow(0);
+    }
+    private int calculateGrow(int min) {
+        if (this.size == 0) {
+            return NumbersUtil.max(min, 1);
         }
         int amount = this.mLastGrow;
         if(amount >= GROW_LIMIT){
-            return amount;
+            return NumbersUtil.max(min, amount);
         }
         if(amount == 0){
             amount = 1;
@@ -1135,6 +1137,9 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         }
         if(amount > GROW_LIMIT){
             amount = GROW_LIMIT;
+        }
+        if (min > amount) {
+            return min;
         }
         this.mLastGrow = amount;
         if(this.size < 4){

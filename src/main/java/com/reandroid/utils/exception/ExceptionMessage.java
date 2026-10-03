@@ -13,23 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.reandroid.dex.smali.model;
+package com.reandroid.utils.exception;
 
-import com.reandroid.dex.program.InstructionLabelType;
-import com.reandroid.dex.smali.SmaliDirective;
-
-public class SmaliCodeCatchAll extends SmaliCodeExceptionHandler{
-
-    public SmaliCodeCatchAll(){
-        super();
-    }
-
-    @Override
-    public SmaliDirective getSmaliDirective() {
-        return SmaliDirective.CATCH_ALL;
-    }
-    @Override
-    public InstructionLabelType getLabelType() {
-        return InstructionLabelType.CATCH_ALL_HANDLER;
-    }
+/**
+ * An interface to obtain message of a throwable.
+ * Classes implementing this indicating that the stacktrace is less important.
+ * */
+public interface ExceptionMessage {
+    String getMessage();
 }
