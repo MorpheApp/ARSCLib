@@ -184,17 +184,10 @@ public class BlockReader extends InputStream {
             length = bytes.length;
         }
         synchronized (mLock){
-            int actualPosition = mStart + mPosition;
-            int i;
-            for(i = 0; i < length; i++){
-                bytes[start + i] = BUFFER[actualPosition + i];
-                mPosition ++;
-                if(mPosition >= mLength){
-                    i++;
-                    break;
-                }
-            }
-            return i;
+            int count = Math.min(length, mLength - mPosition);
+            System.arraycopy(BUFFER, mStart + mPosition, bytes, start, count);
+            mPosition += count;
+            return count;
         }
     }
     public int getPosition(){
