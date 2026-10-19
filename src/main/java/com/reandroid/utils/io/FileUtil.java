@@ -276,7 +276,8 @@ public class FileUtil {
         if (!file.isFile()) {
             throw new FileNotFoundException("No such file: " + file);
         }
-        return new FileInputStream(file);
+        // Buffered, as callers such as the XML parser read a byte at a time while detecting the charset
+        return new BufferedInputStream(new FileInputStream(file));
     }
     public static OutputStream outputStream(File file) throws IOException{
         ensureParentDirectory(file);

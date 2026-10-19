@@ -49,15 +49,18 @@ class OutputSource {
         CountingOutputStream<DeflaterOutputStream> deflateCounter = null;
 
         if(inputSource.getMethod() != Archive.STORED){
-            DeflaterOutputStream deflaterInputStream =
-                    new DeflaterOutputStream(rawCounter, new Deflater(Deflater.DEFAULT_COMPRESSION, true), true);
-            deflateCounter = new CountingOutputStream<>(deflaterInputStream, false);
-        }
-        if(deflateCounter != null){
-            rawCounter.disableCrc(true);
-            inputSource.write(deflateCounter);
-            deflateCounter.close();
-            rawCounter.close();
+            Deflater deflater = takeDeflater();
+            try {
+                DeflaterOutputStream deflaterInputStream =
+                        new DeflaterOutputStream(rawCounter, deflater, true);
+                deflateCounter = new CountingOutputStream<>(deflaterInputStream, false);
+                rawCounter.disableCrc(true);
+                inputSource.write(deflateCounter);
+                deflateCounter.close();
+                rawCounter.close();
+            } finally {
+                returnDeflater(deflater);
+            }
         }else {
             inputSource.write(rawCounter);
         }
@@ -170,5 +173,26 @@ class OutputSource {
             apkLogger.logVerbose(msg);
         }
     }
+    // A Deflater holds native zlib memory that DeflaterOutputStream never releases for one it is
+    // handed, so a thread reuses its own for each entry instead of creating one per entry. It is
+    // taken out while in use, so an entry that writes an archive of its own gets another one
+    private static Deflater takeDeflater() {
+        Deflater deflater = DEFLATER.get();
+        if (deflater == null) {
+            return new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        }
+        DEFLATER.set(null);
+        deflater.reset();
+        return deflater;
+    }
+    private static void returnDeflater(Deflater deflater) {
+        if (DEFLATER.get() == null) {
+            DEFLATER.set(deflater);
+        } else {
+            deflater.end();
+        }
+    }
+
     private static final long LOG_LARGE_FILE_SIZE = 2L * 1000 * 1024;
+    private static final ThreadLocal<Deflater> DEFLATER = new ThreadLocal<>();
 }
