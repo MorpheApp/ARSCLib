@@ -1069,9 +1069,7 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         return update;
     }
     private void arrayCopy(Object[] source, Object[] destination, int length){
-        for(int i = 0; i < length; i++){
-            destination[i] = source[i];
-        }
+        System.arraycopy(source, 0, destination, 0, length);
     }
     private Object[] getNewArray(Object[] source, int length){
         Object[] result = getNewArray(length);
@@ -1125,7 +1123,9 @@ public class ArrayCollection<T> implements ArraySupplier<T>, List<T>, Set<T>, Sw
         }
         int amount = this.mLastGrow;
         if(amount >= GROW_LIMIT){
-            return NumbersUtil.max(min, amount);
+            // A quarter of a large list, so filling it does not copy it over and over, such as
+            // a string pool of hundreds of thousands growing by thousands at a time
+            return NumbersUtil.max(min, NumbersUtil.max(amount, this.size >> 2));
         }
         if(amount == 0){
             amount = 1;

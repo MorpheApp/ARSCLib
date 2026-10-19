@@ -30,6 +30,28 @@ public class ArrayCollectionTest {
     }
 
     @Test
+    public void testLargeListGrowsByQuarter() {
+        ArrayCollection<Integer> collection = new ArrayCollection<>();
+        int count = 100000;
+        for (int i = 0; i < count; i++) {
+            collection.add(i);
+        }
+        Assert.assertEquals(count, collection.size());
+        for (int i = 0; i < count; i++) {
+            Assert.assertEquals(Integer.valueOf(i), collection.get(i));
+        }
+
+        while (collection.availableCapacity() > 0) {
+            collection.add(-1);
+        }
+        int size = collection.size();
+        collection.add(-1);
+        Assert.assertTrue("Grew by " + (collection.availableCapacity() + 1) + " at size " + size,
+                collection.availableCapacity() + 1 >= size / 4);
+        Assert.assertEquals(Integer.valueOf(count - 1), collection.get(count - 1));
+    }
+
+    @Test
     public void testInsertOrder() {
         ArrayCollection<Integer> collection = new ArrayCollection<>();
         for (int i = 0; i < 100; i++) {
