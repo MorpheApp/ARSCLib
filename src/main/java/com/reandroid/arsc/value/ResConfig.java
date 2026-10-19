@@ -21,7 +21,6 @@ import com.reandroid.json.JSONObject;
 import com.reandroid.utils.CompareUtil;
 import com.reandroid.utils.HexUtil;
 
-import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -498,8 +497,18 @@ public class ResConfig extends ResConfigBase implements JSONConvert<JSONObject>,
     }
     @Override
     public int hashCode(){
-        byte[] bts = ByteArray.trimTrailZeros(getValueBytes());
-        return Arrays.hashCode(bts);
+        // Arrays.hashCode of the bytes without their trailing zeros, without copying them, as
+        // getQualifiers() calls this every time
+        byte[] bts = getValueBytes();
+        int length = bts.length;
+        while (length > 0 && bts[length - 1] == 0) {
+            length--;
+        }
+        int result = 1;
+        for (int i = 0; i < length; i++) {
+            result = 31 * result + bts[i];
+        }
+        return result;
     }
     @Override
     public boolean equals(Object obj){

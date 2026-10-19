@@ -1,5 +1,6 @@
 package com.reandroid.arsc.value;
 
+import com.reandroid.arsc.item.ByteArray;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,6 +28,29 @@ public class ResConfigTest {
                     + ", parsed = " + resConfig, errors);
 
         }
+    }
+
+    @Test
+    public void testHashCodeIgnoresTrailingZeros() {
+        for(String qualifier : QUALIFIERS){
+            ResConfig resConfig = new ResConfig();
+            resConfig.parseQualifiers(qualifier);
+            byte[] trimmed = ByteArray.trimTrailZeros(resConfig.getValueBytes());
+            Assert.assertEquals(qualifier, Arrays.hashCode(trimmed), resConfig.hashCode());
+
+            // The same configuration in a larger block, as an older or newer table holds it
+            ResConfig larger = new ResConfig();
+            larger.parseQualifiers(qualifier);
+            larger.setConfigSize(ResConfig.SIZE_64);
+            Assert.assertEquals(qualifier, resConfig, larger);
+            Assert.assertEquals(qualifier, larger, resConfig);
+            Assert.assertEquals(qualifier, resConfig.hashCode(), larger.hashCode());
+        }
+        ResConfig night = new ResConfig();
+        night.parseQualifiers("-night");
+        ResConfig defaults = new ResConfig();
+        Assert.assertNotEquals(defaults, night);
+        Assert.assertNotEquals(defaults.hashCode(), night.hashCode());
     }
 
     private static final String[] QUALIFIERS = new String[]{

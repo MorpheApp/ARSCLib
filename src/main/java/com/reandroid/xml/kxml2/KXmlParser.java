@@ -147,6 +147,13 @@ public class KXmlParser implements XmlPullParser, Closeable {
     private int bufferStartLine;
     private int bufferStartColumn;
 
+    /** Where getLineNumber() stopped counting, and the newlines it counted up to there. */
+    private char[] lineCountBuffer;
+    private int lineCountStartLine;
+    private int lineCountStartColumn;
+    private int lineCountPosition;
+    private int lineCountNewlines;
+
     // the current token
 
     private int type;
@@ -1628,6 +1635,7 @@ public class KXmlParser implements XmlPullParser, Closeable {
         limit = 0;
         bufferStartLine = 0;
         bufferStartColumn = 0;
+        lineCountBuffer = null;
         depth = 0;
         documentEntities = null;
     }
@@ -1948,15 +1956,28 @@ public class KXmlParser implements XmlPullParser, Closeable {
     }
 
     public int getLineNumber() {
-        int result = bufferStartLine;
         int position = this.position - 1;
         char[] buffer = this.buffer;
-        int i;
-        for (i = 0; i < position; i++) {
+        int i = 0;
+        int newlines = 0;
+        // Counting from where the last call stopped, as the line of every element is asked for.
+        // Moving the buffer changes where it starts, which starts the count over
+        if (buffer == lineCountBuffer && bufferStartLine == lineCountStartLine
+                && bufferStartColumn == lineCountStartColumn && position >= lineCountPosition) {
+            i = lineCountPosition;
+            newlines = lineCountNewlines;
+        }
+        for (; i < position; i++) {
             if (buffer[i] == '\n') {
-                result ++;
+                newlines ++;
             }
         }
+        lineCountBuffer = buffer;
+        lineCountStartLine = bufferStartLine;
+        lineCountStartColumn = bufferStartColumn;
+        lineCountPosition = i;
+        lineCountNewlines = newlines;
+        int result = bufferStartLine + newlines;
         while (i >= 0) {
             char c = buffer[i];
             if (c > ' ') {

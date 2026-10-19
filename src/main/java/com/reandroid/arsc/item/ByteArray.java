@@ -223,6 +223,17 @@ public class ByteArray extends BlockItem {
         if(bts1==bts2){
             return true;
         }
-        return equals(trimTrailZeros(bts1), trimTrailZeros(bts2));
+        // Compared in place, as trimming copies both
+        int length1 = bts1 == null ? 0 : bts1.length;
+        int length2 = bts2 == null ? 0 : bts2.length;
+        int length = Math.max(length1, length2);
+        for(int i = 0; i < length; i++){
+            byte b1 = i < length1 ? bts1[i] : 0;
+            byte b2 = i < length2 ? bts2[i] : 0;
+            if(b1 != b2){
+                return false;
+            }
+        }
+        return true;
     }
 }

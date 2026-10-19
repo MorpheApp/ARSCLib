@@ -319,6 +319,13 @@ public class ResXmlStartNamespaceList extends ResXmlChunkList<ResXmlStartNamespa
         return getParentInstance(ResXmlElement.class);
     }
 
+    private void ensureNamespace(String uri, String prefix, XmlPullParser parser) {
+        // The line is only asked for when the namespace is new, as the parser counts the lines
+        // of all it read so far for it
+        if (get(uri, prefix) == null) {
+            ensureNamespace(uri, prefix, parser.getLineNumber());
+        }
+    }
     private void ensureNamespace(String uri, String prefix, int lineNumber) {
         ResXmlNamespace namespace = get(uri, prefix);
         if (namespace == null) {
@@ -341,7 +348,7 @@ public class ResXmlStartNamespaceList extends ResXmlChunkList<ResXmlStartNamespa
             ensureNamespace(
                     parser.getNamespaceUri(i),
                     parser.getNamespacePrefix(i),
-                    parser.getLineNumber());
+                    parser);
         }
         count = parser.getAttributeCount();
         for(int i = 0; i < count; i++) {
