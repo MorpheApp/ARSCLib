@@ -128,7 +128,32 @@ public class StringItemList<T extends StringItem> extends OffsetBlockList<T> imp
     protected void onPreRefresh() {
         super.onPreRefresh();
         if (mSortRequired) {
-            sort();
+            StringPool<T> stringPool = getStringPool();
+            if (stringPool != null && stringPool.isKeepStringOrder() && !header.isSorted()) {
+                mSortRequired = false;
+                moveStyledFirst();
+                // The styles follow their strings, as after sort()
+                stringPool.onSortedInternal();
+            } else {
+                sort();
+            }
+        }
+    }
+
+    /**
+     * Moves the styled strings ahead of the unstyled ones, as the styles of a pool belong to its
+     * first strings. Otherwise, every unstyled string before the last styled one would take an
+     * empty style. A styled string is swapped with the first unstyled one, so only those two
+     * change index, which leaves a pool whose styled strings already come first as it is.
+     */
+    private void moveStyledFirst() {
+        int size = size();
+        int unstyled = 0;
+        for (int i = 0; i < size; i++) {
+            if (get(i).hasStyle()) {
+                swap(unstyled, i);
+                unstyled++;
+            }
         }
     }
 

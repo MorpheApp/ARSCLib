@@ -52,6 +52,7 @@ public abstract class StringPool<T extends StringItem> extends Chunk<StringPoolH
 
     private final MultiMap<String, T> poolMap;
     private boolean stringLinkLocked;
+    private boolean keepStringOrder;
 
     StringPool(boolean is_utf8, boolean stringLinkLocked, StringCreator<T> creator) {
         super(new StringPoolHeader(), 6);
@@ -125,6 +126,19 @@ public abstract class StringPool<T extends StringItem> extends Chunk<StringPoolH
     public void sort() {
         ensureStringLinkUnlockedInternal();
         getStringsArray().sort();
+    }
+    /**
+     * Whether a refresh keeps the strings in their order instead of sorting them, so every string
+     * keeps its index and new strings stay at the end. Nothing that refers to a string has to be
+     * updated then. Only a styled string after an unstyled one moves, as the styles belong to the
+     * first strings. A pool whose header is flagged as sorted is sorted all the same, as Android
+     * searches such a pool by its order.
+     */
+    public boolean isKeepStringOrder() {
+        return keepStringOrder;
+    }
+    public void setKeepStringOrder(boolean keepStringOrder) {
+        this.keepStringOrder = keepStringOrder;
     }
     public boolean isStringLinkLocked() {
         return stringLinkLocked;

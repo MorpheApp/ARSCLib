@@ -10,6 +10,7 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -24,6 +25,103 @@ public class TableStringPoolTest {
         duplicateStringsTest();
         styledStringsTest();
         unusedStringsTest();
+    }
+
+    @Test
+    public void keepStringOrderAppendsNewStrings() {
+        TableStringPool stringPool = newStringPool();
+        createStyledString(stringPool, 1);
+        createPlainString(stringPool, 5);
+        createPlainString(stringPool, 3);
+        stringPool.refresh();
+        List<TableString> before = listStrings(stringPool);
+
+        stringPool.setKeepStringOrder(true);
+        TableString added1 = createPlainString(stringPool, 9);
+        TableString added2 = createPlainString(stringPool, 0);
+        stringPool.refresh();
+
+        for (int i = 0; i < before.size(); i++) {
+            Assert.assertSame("Moved string " + i, before.get(i), stringPool.get(i));
+        }
+        Assert.assertSame(added1, stringPool.get(before.size()));
+        Assert.assertSame(added2, stringPool.get(before.size() + 1));
+        assertReferencesAndStyles(stringPool);
+    }
+
+    @Test
+    public void keepStringOrderMovesNewStyledStringsForward() {
+        TableStringPool stringPool = newStringPool();
+        createStyledString(stringPool, 1);
+        createPlainString(stringPool, 2);
+        createPlainString(stringPool, 3);
+        createPlainString(stringPool, 4);
+        stringPool.refresh();
+        List<TableString> before = listStrings(stringPool);
+        Assert.assertEquals(1, stringPool.countStyles());
+
+        stringPool.setKeepStringOrder(true);
+        TableString plain = createPlainString(stringPool, 5);
+        TableString styled = createStyledString(stringPool, 6);
+        String styledXml = styled.getXml();
+        stringPool.refresh();
+
+        // The new styled string takes the place of the first unstyled one, which goes where the
+        // styled one was, and nothing else moves
+        TableString displaced = before.get(1);
+        Assert.assertSame(styled, stringPool.get(1));
+        Assert.assertSame(displaced, stringPool.get(before.size() + 1));
+        Assert.assertSame(plain, stringPool.get(before.size()));
+        for (int i = 0; i < before.size(); i++) {
+            if (i != 1) {
+                Assert.assertSame("Moved string " + i, before.get(i), stringPool.get(i));
+            }
+        }
+        Assert.assertEquals(2, stringPool.countStyles());
+        Assert.assertEquals(styledXml, stringPool.get(1).getXml());
+        assertReferencesAndStyles(stringPool);
+    }
+
+    @Test
+    public void keepStringOrderStillSortsAPoolFlaggedSorted() {
+        TableStringPool stringPool = newStringPool();
+        stringPool.getHeaderBlock().setSorted(true);
+        stringPool.setKeepStringOrder(true);
+        TableString item3 = createPlainString(stringPool, 3);
+        TableString item1 = createPlainString(stringPool, 1);
+        TableString item2 = createPlainString(stringPool, 2);
+        stringPool.refresh();
+
+        Assert.assertSame(item1, stringPool.get(0));
+        Assert.assertSame(item2, stringPool.get(1));
+        Assert.assertSame(item3, stringPool.get(2));
+        assertReferencesAndStyles(stringPool);
+    }
+
+    private static List<TableString> listStrings(TableStringPool stringPool) {
+        List<TableString> strings = new ArrayList<>();
+        for (int i = 0; i < stringPool.size(); i++) {
+            strings.add(stringPool.get(i));
+        }
+        return strings;
+    }
+
+    private static void assertReferencesAndStyles(TableStringPool stringPool) {
+        int styles = stringPool.countStyles();
+        for (int i = 0; i < stringPool.size(); i++) {
+            TableString tableString = stringPool.get(i);
+            Assert.assertEquals("Index of " + tableString, i, tableString.getIndex());
+            Iterator<ReferenceItem> references = tableString.getReferences();
+            while (references.hasNext()) {
+                Assert.assertEquals("Reference to " + tableString, i, references.next().get());
+            }
+            if (i < styles) {
+                Assert.assertTrue("Unstyled among the styled: " + tableString, tableString.hasStyle());
+                Assert.assertSame(tableString.getStyle(), stringPool.getStyleArray().get(i));
+            } else {
+                Assert.assertFalse("Styled after the styles: " + tableString, tableString.hasStyle());
+            }
+        }
     }
 
     private void createStringsTest() {
