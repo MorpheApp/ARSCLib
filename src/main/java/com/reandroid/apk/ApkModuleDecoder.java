@@ -42,15 +42,20 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
     private DexProfileDecoder mDexProfileDecoder;
     private boolean mLogErrors;
     private DecodeFilter mDecodeFilter;
+    private boolean mSanitizePaths;
+    private boolean mInitialized;
 
-    public ApkModuleDecoder(ApkModule apkModule){
+    public ApkModuleDecoder(ApkModule apkModule) {
         super();
         this.apkModule = apkModule;
         this.mDecodedPaths = new HashSet<>();
+        this.mSanitizePaths = true;
         setApkLogger(apkModule.getApkLogger());
     }
+
     public final void decode(File mainDirectory) throws IOException{
         initialize();
+        sanitizeFilePaths();
         decodeArchiveInfo(mainDirectory);
         decodeUncompressedFiles(mainDirectory);
 
@@ -68,8 +73,8 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
     public void extractRootFiles(File mainDirectory) throws IOException {
         logMessage("Extracting root files ...");
         File rootDir = new File(mainDirectory, ApkUtil.ROOT_NAME);
-        for(InputSource inputSource:apkModule.getInputSources()){
-            if(containsDecodedPath(inputSource.getAlias())){
+        for (InputSource inputSource:apkModule.getInputSources()) {
+            if (containsDecodedPath(inputSource.getAlias())) {
                 continue;
             }
             extractRootFile(rootDir, inputSource);
@@ -91,7 +96,7 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
         JSONObject jsonObject = new JSONObject();
         JSONArray jsonArray = new JSONArray();
         Iterator<Marker> markers = dexDirectory.getMarkers();
-        while (markers.hasNext()){
+        while (markers.hasNext()) {
             jsonArray.put(markers.next().getJsonObject());
         }
         jsonObject.put("markers", jsonArray);
@@ -119,7 +124,7 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
         List<DexFileInputSource> dexList = apkModule.listDexFiles();
         DexDecoder dexDecoder = getDexDecoder();
         dexDecoder.decodeDex(apkModule, mainDir);
-        for(DexFileInputSource inputSource : dexList) {
+        for (DexFileInputSource inputSource : dexList) {
             addDecodedPath(inputSource.getAlias());
         }
     }
@@ -128,7 +133,7 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
         return apkModule;
     }
     public DexDecoder getDexDecoder() {
-        if(mDexDecoder == null){
+        if (mDexDecoder == null) {
             DexFileRawDecoder rawDecoder = new DexFileRawDecoder();
             rawDecoder.setApkLogger(getApkLogger());
             mDexDecoder = rawDecoder;
@@ -146,14 +151,21 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
         this.mDexProfileDecoder = dexProfileDecoder;
     }
 
-    public void sanitizeFilePaths(){
-        PathSanitizer sanitizer = PathSanitizer.create(getApkModule());
-        sanitizer.sanitize();
+    public void setSanitizePaths(boolean sanitizePaths) {
+        this.mSanitizePaths = sanitizePaths;
+    }
+
+    public void sanitizeFilePaths() {
+        if (mInitialized && mSanitizePaths) {
+            PathSanitizer sanitizer = PathSanitizer.create(getApkModule());
+            sanitizer.setApkLogger(getApkLogger());
+            sanitizer.sanitize();
+        }
     }
     public void dumpSignatures(File mainDirectory) throws IOException {
         ApkModule apkModule = getApkModule();
         ApkSignatureBlock signatureBlock = apkModule.getApkSignatureBlock();
-        if(signatureBlock == null){
+        if (signatureBlock == null) {
             return;
         }
         File sigDir = new File(mainDirectory, ApkUtil.SIGNATURE_DIR_NAME);
@@ -166,15 +178,15 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
         pathMap.add(getApkModule().getZipEntryMap());
         pathMap.toJson().write(file);
     }
-    public boolean containsDecodedPath(String path){
+    public boolean containsDecodedPath(String path) {
         return mDecodedPaths.contains(path);
     }
-    public void addDecodedPath(String path){
+    public void addDecodedPath(String path) {
         mDecodedPaths.add(path);
     }
 
-    public DecodeFilter getDecodeFilter(){
-        if(mDecodeFilter == null){
+    public DecodeFilter getDecodeFilter() {
+        if (mDecodeFilter == null) {
             mDecodeFilter = new DecodeFilter();
         }
         return mDecodeFilter;
@@ -182,7 +194,7 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
     public void setDecodeFilter(DecodeFilter decodeFilter) {
         this.mDecodeFilter = decodeFilter;
     }
-    boolean isExcluded(String path){
+    boolean isExcluded(String path) {
         return getDecodeFilter().isExcluded(path);
     }
 
@@ -192,59 +204,60 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
     }
 
     void logOrThrow(String message, Throwable exception) throws IOException{
-        if(isLogErrors()){
+        if (isLogErrors()) {
             logError(message, exception);
             return;
         }
-        if(message == null && exception == null){
+        if (message == null && exception == null) {
             return;
         }
-        if(exception == null){
+        if (exception == null) {
             exception = new IOException(message);
         }
-        if(exception instanceof IOException){
+        if (exception instanceof IOException) {
             throw (IOException) exception;
         }
         throw new IOException(exception);
     }
 
 
-    public void validateResourceNames(){
+    public void validateResourceNames() {
         logMessage("Validating resource names ...");
         TableBlock tableBlock = apkModule.getTableBlock();
         TableIdentifier tableIdentifier = new TableIdentifier();
         tableIdentifier.load(tableBlock);
         String msg = tableIdentifier.validateSpecNames();
-        if(msg == null){
+        if (msg == null) {
             logMessage("All resource names are valid");
             return;
         }
-        if(tableBlock.removeUnusedSpecs()) {
+        if (tableBlock.removeUnusedSpecs()) {
             msg = msg + ", removed specs";
         }
         logMessage(msg);
     }
-    public void validateResourceNames(PackageBlock packageBlock){
+    public void validateResourceNames(PackageBlock packageBlock) {
         logMessage("Validating: " + packageBlock.getName());
         PackageIdentifier packageIdentifier = new PackageIdentifier();
         packageIdentifier.load(packageBlock);
         String msg = packageIdentifier.validateSpecNames();
-        if(msg == null){
+        if (msg == null) {
             logMessage("[" + packageBlock.getName() + "] All resource names are valid");
             return;
         }
-        if(packageBlock.removeUnusedSpecs()) {
+        if (packageBlock.removeUnusedSpecs()) {
             msg = "[" + packageBlock.getName() + "]" + msg + ", removed specs";
             logMessage(msg);
         }
     }
-    void initialize(){
+    void initialize() {
         mDecodedPaths.clear();
         ensureTableBlock();
+        mInitialized = true;
     }
-    private void ensureTableBlock(){
+    private void ensureTableBlock() {
         ApkModule apkModule = getApkModule();
-        if(apkModule.ensureTableBlock()){
+        if (apkModule.ensureTableBlock()) {
             logMessage("Missing " + TableBlock.FILE_NAME + ", created empty");
         }
     }
@@ -257,7 +270,7 @@ public abstract class ApkModuleDecoder extends ApkModuleCoder{
     }
 
 
-    static File toPackageDirectory(File mainDir, PackageBlock packageBlock){
+    static File toPackageDirectory(File mainDir, PackageBlock packageBlock) {
         File dir = new File(mainDir, TableBlock.DIRECTORY_NAME);
         return new File(dir, packageBlock.buildDecodeDirectoryName());
     }

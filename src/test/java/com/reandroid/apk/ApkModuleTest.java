@@ -323,6 +323,8 @@ public class ApkModuleTest {
         createArrayEntry(packageBlock);
         createMoreStrings(packageBlock);
         addArrayBagStrings_1(packageBlock);
+        testCreateDynamicReference(packageBlock);
+        createBooleanValues(packageBlock);
 
         tableBlock.refreshFull();
 
@@ -378,6 +380,48 @@ public class ApkModuleTest {
         packageBlock.getTableBlock().refreshFull();
 
         Assert.assertEquals(text, resValue.getValueAsString());
+    }
+
+    private void testCreateDynamicReference(PackageBlock packageBlock) {
+        Entry entry = packageBlock
+                .getOrCreate("", "color", "test_dynamic_reference");
+        entry.setValueAsRaw(ValueType.DYNAMIC_REFERENCE, 0x0196000a);
+        entry.getHeader().setPublic(false);
+
+        ResValue resValue = entry.getResValue();
+        Assert.assertNotNull(resValue);
+        Assert.assertEquals(ValueType.DYNAMIC_REFERENCE, resValue.getValueType());
+        Assert.assertEquals("@@0x0196000a", resValue.decodeValue());
+
+        entry = packageBlock
+                .getOrCreate("", "attr", "test_dynamic_attribute");
+        entry.setValueAsRaw(ValueType.DYNAMIC_ATTRIBUTE, 0x01940007);
+        entry.getHeader().setPublic(true);
+
+        resValue = entry.getResValue();
+        Assert.assertNotNull(resValue);
+        Assert.assertEquals(ValueType.DYNAMIC_ATTRIBUTE, resValue.getValueType());
+        Assert.assertEquals("??0x01940007", resValue.decodeValue());
+    }
+
+    private void createBooleanValues(PackageBlock packageBlock) {
+        packageBlock.getOrCreate("-en", "bool", "test_bool_1")
+                .setValueAsBoolean(true);
+        packageBlock.getOrCreate("-fr", "bool", "test_bool_1")
+                .setValueAsBoolean(false);
+        packageBlock.getOrCreate("-land", "bool", "test_bool_1")
+                .setValueAsBoolean(true);
+        packageBlock.getOrCreate("-hdpi", "bool", "test_bool_1")
+                .setValueAsBoolean(true);
+
+        packageBlock.getOrCreate("-en", "bool", "test_bool_2")
+                .setValueAsBoolean(false);
+        packageBlock.getOrCreate("-fr", "bool", "test_bool_2")
+                .setValueAsBoolean(true);
+        packageBlock.getOrCreate("-land", "bool", "test_bool_2")
+                .setValueAsBoolean(false);
+        packageBlock.getOrCreate("-hdpi", "bool", "test_bool_2")
+                .setValueAsBoolean(true);
     }
     private void addArrayBagStrings_1(PackageBlock packageBlock){
 
