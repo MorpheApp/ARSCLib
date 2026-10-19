@@ -23,38 +23,28 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.zip.CRC32;
 
 public class Crc32 extends Checksum {
 
-    private static final long[] CRC_TABLE;
+    // Small writes are gathered first, as every update of the platform checksum is a native call
+    // on Android, and an entry is mostly written a few bytes at a time
+    private static final int BUFFER_SIZE = 8 * 1024;
 
-    static {
-        long[] table = new long[256];
-        CRC_TABLE = table;
-        for (int i = 0; i < 256; i++) {
-            long c = i;
-            for (int j = 0; j < 8; j++) {
-                if ((c & 1) == 1) {
-                    c = 0xedb88320L ^ (c >> 1);
-                } else {
-                    c = c >> 1;
-                }
-            }
-            table[i] = c;
-        }
-    }
-
-    private long mCrc;
+    private final CRC32 mCrc;
+    private byte[] mBuffer;
+    private int mBuffered;
     private long mLength;
 
     public Crc32() {
         super();
-        this.mCrc = 0xffffffffL;
+        this.mCrc = new CRC32();
     }
 
     @Override
     public long getValue() {
-        return mCrc ^ 0xffffffffL;
+        flush();
+        return mCrc.getValue();
     }
 
     public long getLength() {
@@ -63,21 +53,36 @@ public class Crc32 extends Checksum {
 
     @Override
     public void reset() {
-        this.mCrc = 0xffffffffL;
+        mCrc.reset();
+        this.mBuffered = 0;
         this.mLength = 0;
     }
 
     @Override
     public void update(byte[] data, int offset, int length) {
-        long c = mCrc;
-        int end = offset + length;
-        long[] table = CRC_TABLE;
-        for (int i = offset; i < end; i++) {
-            int b = data[i] & 0xff;
-            c = table[(int)((c ^ b) & 0xff)] ^ (c >> 8);
-        }
-        this.mCrc = c;
         this.mLength += length;
+        if (length >= BUFFER_SIZE) {
+            flush();
+            mCrc.update(data, offset, length);
+            return;
+        }
+        byte[] buffer = this.mBuffer;
+        if (buffer == null) {
+            buffer = new byte[BUFFER_SIZE];
+            this.mBuffer = buffer;
+        }
+        if (mBuffered + length > BUFFER_SIZE) {
+            flush();
+        }
+        System.arraycopy(data, offset, buffer, mBuffered, length);
+        mBuffered += length;
+    }
+
+    private void flush() {
+        if (mBuffered != 0) {
+            mCrc.update(mBuffer, 0, mBuffered);
+            mBuffered = 0;
+        }
     }
 
     public static long of(byte[] bytes) {
