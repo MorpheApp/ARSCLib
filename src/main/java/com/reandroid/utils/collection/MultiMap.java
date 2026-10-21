@@ -44,7 +44,7 @@ public class MultiMap<K, V> {
                     continue;
                 }
                 if(obj.getClass() == EntryList.class) {
-                    EntryList<V> entryList = (EntryList<V>) obj;
+                    EntryList<V> entryList = sortedEntryList(obj);
                     if(entryList.size() == 1) {
                         entry.setValue(entryList.get(0));
                     }else {
@@ -119,11 +119,7 @@ public class MultiMap<K, V> {
             return;
         }
         if(obj.getClass() == EntryList.class) {
-            EntryList<Object> entryList = (EntryList<Object>) obj;
-            if(!entryList.containsExact(value)) {
-                entryList.add(value);
-                sortFavourites(entryList);
-            }
+            ((EntryList<Object>) obj).addUnchecked(value);
         }else {
             obj = map.remove(key);
             obj = combine(obj, value);
@@ -151,6 +147,12 @@ public class MultiMap<K, V> {
                     return null;
                 }
                 obj = entryList.remove(i);
+                if(entryList.sortRequired) {
+                    // Added again since the list was last read
+                    while((i = entryList.indexOfExact(value, i)) >= 0) {
+                        entryList.remove(i);
+                    }
+                }
                 if(entryList.isEmpty()) {
                     map.remove(key);
                 }else if(entryList.size() == 1) {
@@ -194,7 +196,7 @@ public class MultiMap<K, V> {
                 return null;
             }
             if(obj.getClass() == EntryList.class) {
-                EntryList<V> entryList = (EntryList<V>) obj;
+                EntryList<V> entryList = sortedEntryList(obj);
                 int i = entryList.indexOfIf(predicate);
                 if(i < 0) {
                     return null;
@@ -276,38 +278,38 @@ public class MultiMap<K, V> {
         boolean list2 = obj2.getClass() == EntryList.class;
         if(!list1 && !list2) {
             EntryList<Object> entryList = new EntryList<>(obj1, obj2);
-            sortFavourites(entryList);
+            entryList.sortRequired = true;
             return entryList;
         }
         if(list1 && !list2) {
             EntryList<Object> entryList = (EntryList<Object>) obj1;
-            if(!entryList.containsExact(obj2)) {
-                entryList.add(obj2);
-                sortFavourites(entryList);
-            }
+            entryList.addUnchecked(obj2);
             return entryList;
         }
         if(!list1) {
             EntryList<Object> entryList = (EntryList<Object>) obj2;
-            if(!entryList.containsExact(obj1)) {
-                entryList.add(obj1);
-                sortFavourites(entryList);
-            }
+            entryList.addUnchecked(obj1);
             return entryList;
         }
         EntryList<Object> entryList1 = (EntryList<Object>) obj1;
         EntryList<Object> entryList2 = (EntryList<Object>) obj2;
-        boolean added = false;
         for(Object obj : entryList2) {
-            if(!entryList1.containsExact(obj)){
-                entryList1.add(obj);
-                added = true;
-            }
-        }
-        if(added) {
-            sortFavourites(entryList1);
+            entryList1.addUnchecked(obj);
         }
         return entryList1;
+    }
+    // Duplicates are dropped and the values sorted when the list is read rather than on every
+    // add, as each add would otherwise search and sort the whole list. Many strings changed to
+    // the same text, such as emptied ones, made that quadratic.
+    private <T> EntryList<T> sortedEntryList(Object obj) {
+        EntryList<T> entryList = (EntryList<T>) obj;
+        if(entryList.sortRequired) {
+            entryList.sortRequired = false;
+            Set<Object> values = Collections.newSetFromMap(new IdentityHashMap<>(entryList.size()));
+            entryList.removeIf(value -> !values.add(value));
+            sortFavourites((List<Object>) entryList);
+        }
+        return entryList;
     }
     public Iterator<V> getAll(K key) {
         synchronized (mLock) {
@@ -323,7 +325,7 @@ public class MultiMap<K, V> {
                 return EmptyIterator.of();
             }
             if(obj.getClass() == EntryList.class) {
-                return ((EntryList<V>) obj).iterator();
+                return this.<V>sortedEntryList(obj).iterator();
             }
             return SingleIterator.of((V) obj);
         }
@@ -345,7 +347,7 @@ public class MultiMap<K, V> {
                 return null;
             }
             if(obj.getClass() == EntryList.class) {
-                return getFromEntryList(key, (EntryList<?>) obj, predicate);
+                return getFromEntryList(key, sortedEntryList(obj), predicate);
             }
             V value = (V) obj;
             if(predicate != null && !predicate.test(value)) {
@@ -432,8 +434,18 @@ public class MultiMap<K, V> {
         return "size = " + size();
     }
     static class EntryList<T> extends ArrayCollection<T> {
+        boolean sortRequired;
+
         public EntryList(Object item1, Object item2) {
             super(new Object[]{item1, item2});
+        }
+        // The value may already be in the list, which is fixed when the list is read
+        void addUnchecked(Object value) {
+            if(getLast() == value) {
+                return;
+            }
+            add((T) value);
+            sortRequired = true;
         }
     }
 }
