@@ -141,7 +141,7 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
     }
 
     public int updateOffset(Block target, int offset) {
-        if (target.isNull()) {
+        if (target == null || target.isNull()) {
             setOffset(NO_ENTRY);
         } else {
             setOffset(offset);

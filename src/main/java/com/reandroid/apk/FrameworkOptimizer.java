@@ -237,7 +237,7 @@ import java.util.zip.ZipEntry;
         while (itr.hasNext()) {
             entry = itr.next();
             if (!isReferenceEntry(entry)) {
-                if (!entry.isNull()) {
+                if (entry != null && !entry.isNull()) {
                     return entry;
                 }
             }

@@ -18,6 +18,7 @@ package com.reandroid.arsc.list;
 import com.reandroid.arsc.chunk.PackageBlock;
 import com.reandroid.arsc.chunk.TypeBlock;
 import com.reandroid.arsc.header.TypeHeader;
+import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.item.IntegerReference;
 import com.reandroid.arsc.item.OffsetItem;
 import com.reandroid.arsc.pool.SpecStringPool;
@@ -30,6 +31,7 @@ import com.reandroid.json.JSONConvert;
 import com.reandroid.json.JSONObject;
 import com.reandroid.utils.CompareUtil;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.function.Predicate;
 
@@ -41,6 +43,25 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
         super(header.getEntriesStart(), offsetList, Entry.CREATOR);
         this.header = header;
         header.setOffsetTypeChangedListener(EntryItemList.this::onOffsetTypeChanged);
+    }
+
+    @Override
+    protected boolean autoFill() {
+        return false;
+    }
+
+    @Override
+    public void readChildes(BlockReader reader) throws IOException {
+        EntryItemOffsetList referenceList = getOffsetReferenceList();
+        int size = referenceList.size();
+        this.setSize(size);
+        for (int i = 0; i < size; i++) {
+            OffsetItem offsetItem = referenceList.get(i);
+            if (offsetItem != null && !offsetItem.isNoEntry()) {
+                Entry entry = createAt(i);
+                offsetItem.readTarget(reader, entry);
+            }
+        }
     }
 
     public Entry getEntry(int entryId) {
@@ -101,7 +122,7 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     }
 
     public void removeAllNull(int start) {
-        trimLastIf(start, Entry::isNull);
+        trimLastIf(start, entry -> entry == null || entry.isNull());
     }
     public Boolean hasComplexEntry() {
         Iterator<Entry> iterator = iterator(true);
@@ -249,5 +270,5 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     }
 
 
-    private static final Predicate<Entry> NON_NULL_PREDICATE = entry -> !entry.isNull();
+    private static final Predicate<Entry> NON_NULL_PREDICATE = entry -> entry != null && !entry.isNull();
 }

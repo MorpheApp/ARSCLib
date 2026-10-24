@@ -22,6 +22,7 @@ import com.reandroid.arsc.container.BlockList;
 import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.item.AlignItem;
 import com.reandroid.arsc.item.IntegerReference;
+import com.reandroid.arsc.item.OffsetItem;
 
 import java.io.IOException;
 
@@ -79,13 +80,25 @@ public class OffsetBlockList<T extends Block> extends BlockList<T> {
         referenceList.setSize(size);
         int offset = 0;
         for (int i = 0; i < size; i++) {
-            offset = referenceList.get(i).updateOffset(this.get(i), offset);
+            offset = updateOffset(referenceList, i, this.get(i), offset);
         }
         AlignItem alignment = getAlignment();
         if (alignment != null) {
             offset += alignment.align(offset);
         }
         return offset;
+    }
+
+    private int updateOffset(OffsetReferenceList<?> referenceList, int i, Block target, int offset) {
+        if (target == null || target.isNull()) {
+            OffsetItem item = referenceList.get(i);
+            if (item != null) {
+                item.setOffset(OffsetItem.NO_ENTRY);
+            }
+            return offset;
+        }
+        OffsetItem item = (OffsetItem) referenceList.getOrCreate(i);
+        return item.updateOffset(target, offset);
     }
 
     @Override
@@ -102,9 +115,15 @@ public class OffsetBlockList<T extends Block> extends BlockList<T> {
     @Override
     protected void refreshChildes() {
         int size = size();
-        if (size != 0 && get(0) instanceof BlockRefresh) {
-            for (int i = 0; i < size; i++) {
-                ((BlockRefresh) get(i)).refresh();
+        if (size != 0) {
+            Block first = getFirst();
+            if (first instanceof BlockRefresh) {
+                for (int i = 0; i < size; i++) {
+                    Block item = get(i);
+                    if (item instanceof BlockRefresh) {
+                        ((BlockRefresh) item).refresh();
+                    }
+                }
             }
         }
     }

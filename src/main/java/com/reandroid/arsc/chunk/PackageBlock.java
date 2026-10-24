@@ -307,7 +307,7 @@ public class PackageBlock extends Chunk<PackageHeader>
         Entry result = null;
         while (iterator.hasNext()){
             Entry entry = iterator.next();
-            if(!entry.isNull()){
+            if(entry != null && !entry.isNull()){
                 return entry;
             }
             if(result == null){
@@ -762,7 +762,7 @@ public class PackageBlock extends Chunk<PackageHeader>
         Iterator<Entry> iterator = resourceEntry.iterator(mergeOption.getKeepEntryConfigs());
         while (iterator.hasNext()) {
             Entry coming = iterator.next();
-            if (coming.isNull()) {
+            if (coming == null || coming.isNull()) {
                 continue;
             }
             Entry entry = mergeWithName(mergeOption, coming);

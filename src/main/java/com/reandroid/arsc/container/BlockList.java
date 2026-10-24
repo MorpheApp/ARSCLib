@@ -109,9 +109,17 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     }
     public T createAt(int index) {
         Creator<? extends T> creator = getCreator();
-        ensureSize(index);
         T item = creator.newInstanceAt(index);
-        add(index, item);
+        if (index < size()) {
+            if (get(index) == null) {
+                set(index, item);
+            } else {
+                add(index, item);
+            }
+        } else {
+            ensureSize(index);
+            add(index, item);
+        }
         return item;
     }
     public T createNext() {
@@ -476,7 +484,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         List<T> items = this.getChildes();
         for (int i = start; i < end; i++) {
             T item = items.get(i);
-            if (item.getIndex() != i) {
+            if (item != null && item.getIndex() != i) {
                 item.setIndex(i);
                 changed = true;
             }
@@ -500,6 +508,13 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
             return null;
         }
         return mItems.get(i);
+    }
+    public T getOrCreate(int index) {
+        T item = get(index);
+        if (item == null) {
+            item = createAt(index);
+        }
+        return item;
     }
     public int getCount() {
         return size();
@@ -557,9 +572,9 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
             }
         };
     }
-    private void updateCreator() {
+    protected void updateCreator() {
         Creator<? extends T> creator = getCreator();
-        if (creator == null) {
+        if (creator == null || !autoFill()) {
             mItems.setInitializer(null);
             return;
         }
@@ -569,6 +584,9 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
             return item;
         };
         mItems.setInitializer(initializer);
+    }
+    protected boolean autoFill() {
+        return true;
     }
     @Override
     public final void refresh() {
@@ -603,7 +621,10 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         byte[] results = null;
         Iterator<T> iterator = iterator();
         while (iterator.hasNext()) {
-            results = addBytes(results, iterator.next().getBytes());
+            T item = iterator.next();
+            if (item != null) {
+                results = addBytes(results, item.getBytes());
+            }
         }
         return results;
     }
@@ -613,10 +634,14 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         int size = size();
         if (size != 0) {
             if (hasSimilarEntries()) {
-                result = size * get(0).countBytes();
+                T first = getFirst();
+                result = (first != null) ? size * first.countBytes() : 0;
             } else {
                 for (int i = 0; i < size; i++) {
-                    result += get(i).countBytes();
+                    T item = get(i);
+                    if (item != null) {
+                        result += item.countBytes();
+                    }
                 }
             }
         }
@@ -660,7 +685,8 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (!hasSimilarEntries()) {
             return false;
         }
-        return get(0).getClass() != end.getClass();
+        T first = getFirst();
+        return first != null && first.getClass() != end.getClass();
     }
     protected boolean hasSimilarEntries() {
         return false;

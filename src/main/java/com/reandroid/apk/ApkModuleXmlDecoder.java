@@ -284,7 +284,7 @@ public class ApkModuleXmlDecoder extends ApkModuleDecoder implements Predicate<E
         serializeXml(packageBlock, document, outputStream);
     }
     private void addDecodedEntry(Entry entry) {
-        if (entry.isNull()) {
+        if (entry == null || entry.isNull()) {
             return;
         }
         int resourceId= entry.getResourceId();
