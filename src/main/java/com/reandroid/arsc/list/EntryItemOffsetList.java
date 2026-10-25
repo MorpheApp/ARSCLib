@@ -58,30 +58,7 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
         int elemSize = is16 ? 2 : 4;
         byte[] buf = new byte[size * elemSize];
         reader.readFully(buf);
-        if (is16) {
-            int offset = 0;
-            for (int i = 0; i < size; i++) {
-                int val = (buf[offset] & 0xff) | ((buf[offset + 1] & 0xff) << 8);
-                if (val != OffsetItem.NO_ENTRY16) {
-                    OffsetItem item = createAt(i);
-                    item.setOffset(val * 4);
-                }
-                offset += 2;
-            }
-        } else {
-            int offset = 0;
-            for (int i = 0; i < size; i++) {
-                int val = (buf[offset] & 0xff) |
-                        ((buf[offset + 1] & 0xff) << 8) |
-                        ((buf[offset + 2] & 0xff) << 16) |
-                        ((buf[offset + 3] & 0xff) << 24);
-                if (val != OffsetItem.NO_ENTRY) {
-                    OffsetItem item = createAt(i);
-                    item.setOffset(val);
-                }
-                offset += 4;
-            }
-        }
+        readDenseOffsets(buf, size, is16);
     }
 
     @Override
@@ -109,6 +86,11 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
             }
             total += read;
         }
+        readDenseOffsets(buf, size, is16);
+        return total;
+    }
+
+    private void readDenseOffsets(byte[] buf, int size, boolean is16) {
         if (is16) {
             int offset = 0;
             for (int i = 0; i < size; i++) {
@@ -133,7 +115,6 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
                 offset += 4;
             }
         }
-        return total;
     }
 
     @Override
@@ -146,23 +127,14 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
             return super.onWriteBytes(stream);
         }
         int result = 0;
-        boolean is16 = getOffsetType() == TypeHeader.OFFSET_16;
+        byte[] noEntryBytes = getOffsetType() == TypeHeader.OFFSET_16 ? NO_ENTRY_BYTES_16 : NO_ENTRY_BYTES_32;
         for (int i = 0; i < size; i++) {
             OffsetItem item = get(i);
             if (item != null) {
                 result += item.writeBytes(stream);
             } else {
-                if (is16) {
-                    stream.write(0xff);
-                    stream.write(0xff);
-                    result += 2;
-                } else {
-                    stream.write(0xff);
-                    stream.write(0xff);
-                    stream.write(0xff);
-                    stream.write(0xff);
-                    result += 4;
-                }
+                stream.write(noEntryBytes);
+                result += noEntryBytes.length;
             }
         }
         return result;
@@ -279,24 +251,21 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
         return false;
     }
     private void changeFromSparse(EntryItemList entryItemList, Creator<? extends OffsetItem> creator) {
-        if (entryItemList.isEmpty()) {
+        entryItemList.sort();
+        List<Integer> idList = listIds(entryItemList);
+        entryItemList.removeIf(entry -> entry == null || entry.isNull());
+        if (idList.isEmpty()) {
+            this.clear();
             this.setCreator(creator);
         } else {
-            entryItemList.sort();
-            List<Integer> idList = listIds(entryItemList);
             int size = idList.size();
             int largest = idList.get(size - 1);
             this.clear();
             this.setCreator(creator);
-            int index = 0;
-            for (int i = 0; i < size; i++) {
-                int id = idList.get(i);
-                for (int j = index + 1; j < id; j++) {
-                    entryItemList.createAt(j);
-                }
-                index = id;
-            }
             entryItemList.setSize(largest + 1);
+            for (int i = size - 1; i >= 0; i--) {
+                entryItemList.swap(i, idList.get(i));
+            }
             this.setSize(entryItemList.size());
         }
     }
@@ -328,4 +297,7 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
         }
         return list;
     }
+
+    private static final byte[] NO_ENTRY_BYTES_16 = new byte[]{(byte) 0xff, (byte) 0xff};
+    private static final byte[] NO_ENTRY_BYTES_32 = new byte[]{(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff};
 }

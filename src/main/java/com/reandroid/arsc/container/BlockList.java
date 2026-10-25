@@ -370,7 +370,19 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (i == j) {
             return false;
         }
-        return swap(get(i), get(j));
+        T item1 = get(i);
+        T item2 = get(j);
+        if (item1 == item2) {
+            return false;
+        }
+        mItems.swap(i, j);
+        if (item1 != null) {
+            item1.setIndex(j);
+        }
+        if (item2 != null) {
+            item2.setIndex(i);
+        }
+        return true;
     }
     public boolean swap(T item1, T item2) {
         if (item1 == item2 || item1 == null || item2 == null) {
@@ -748,7 +760,11 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         }
         JSONArray jsonArray = new JSONArray(size);
         for (int i = 0; i < size; i++) {
-            Object item = blockList.get(i).toJson();
+            JSONConvert<?> element = blockList.get(i);
+            if (element == null) {
+                continue;
+            }
+            Object item = element.toJson();
             if (item != null) {
                 jsonArray.put(item);
             }

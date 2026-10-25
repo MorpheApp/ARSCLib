@@ -141,6 +141,10 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
         }
         return null;
     }
+    @Override
+    public Iterator<Entry> iterator() {
+        return arrayIterator();
+    }
     public Iterator<Entry> iterator(boolean skipNullBlock) {
         if (!skipNullBlock) {
             return iterator();
@@ -156,7 +160,8 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     }
     public int getEntryId(int index) {
         if (isSparse()) {
-            return getOffsetReferenceList().get(index).getIdx();
+            OffsetItem offsetItem = getOffsetReferenceList().get(index);
+            return offsetItem != null ? offsetItem.getIdx() : -1;
         }
         return index;
     }
