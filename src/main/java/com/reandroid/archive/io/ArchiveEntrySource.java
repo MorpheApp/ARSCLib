@@ -21,8 +21,6 @@ import com.reandroid.archive.ArchiveEntry;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.zip.Inflater;
-import java.util.zip.InflaterInputStream;
 
 public class ArchiveEntrySource<T extends ZipInput> extends InputSource {
 
@@ -62,9 +60,11 @@ public class ArchiveEntrySource<T extends ZipInput> extends InputSource {
         if(method == Archive.DEFLATED) {
             return true;
         }
-        try{
+        try(InputStream inputStream = openInflaterInputStream()){
             byte[] buffer = new byte[1024];
-            openInflaterInputStream().read(buffer, 0, buffer.length);
+            // Only whether the entry inflates matters, not how much of it is read
+            //noinspection ResultOfMethodCallIgnored
+            inputStream.read(buffer, 0, buffer.length);
             archiveEntry.setMethod(Archive.DEFLATED);
             this.setMethod(Archive.DEFLATED);
             return true;
@@ -85,8 +85,7 @@ public class ArchiveEntrySource<T extends ZipInput> extends InputSource {
         ArchiveEntry archiveEntry = getArchiveEntry();
         InputStream inputStream = getZipSource().getInputStream(
                 archiveEntry.getFileOffset(), archiveEntry.getDataSize());
-        return new InflaterInputStream(inputStream,
-                new Inflater(true), 512);
+        return new InflatingInputStream(inputStream, 512);
     }
     @Override
     public long getLength() throws IOException{

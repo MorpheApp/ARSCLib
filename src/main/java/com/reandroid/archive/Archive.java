@@ -31,8 +31,6 @@ import com.reandroid.utils.io.IOUtil;
 import java.io.*;
 import java.util.*;
 import java.util.function.Predicate;
-import java.util.zip.Inflater;
-import java.util.zip.InflaterInputStream;
 
 public abstract class Archive<T extends ZipInput> implements Closeable {
 
@@ -117,8 +115,7 @@ public abstract class Archive<T extends ZipInput> implements Closeable {
         if(!archiveEntry.isCompressed()){
             return rawInputStream;
         }
-        return new InflaterInputStream(rawInputStream,
-                new Inflater(true), 1024*1000);
+        return new InflatingInputStream(rawInputStream, 1024*1000);
     }
     public Iterator<ArchiveEntry> getFiles() {
         return iterator(ArchiveEntry::isFile);
