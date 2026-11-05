@@ -17,4 +17,15 @@ package com.reandroid.archive;
 
 public interface WriteProgress {
     void onCompressFile(String path, int mode, long writtenBytes);
+
+    /**
+     * Called after each entry is written to the archive, including entries copied from another
+     * archive as they are, which {@link #onCompressFile} does not report.
+     *
+     * @param path The path of the entry in the archive.
+     * @param written How many entries are written so far.
+     * @param total How many entries the archive gets.
+     */
+    default void onWriteFile(String path, int written, int total) {
+    }
 }

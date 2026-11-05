@@ -165,7 +165,7 @@ public class FrameworkApk extends ApkModule{
             throw new IOException("Entry not found: "+TableBlock.FILE_NAME);
         }
         InputStream inputStream = inputSource.openStream();
-        FrameworkTable frameworkTable=FrameworkTable.load(inputStream);
+        FrameworkTable frameworkTable=FrameworkTable.load(inputStream, getTableReadProgress());
         frameworkTable.setApkFile(this);
 
         BlockInputSource<FrameworkTable> blockInputSource = new BlockInputSource<>(inputSource.getName(), frameworkTable);

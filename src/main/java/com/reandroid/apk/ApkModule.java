@@ -38,6 +38,7 @@ import com.reandroid.arsc.chunk.TypeBlock;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.chunk.xml.ResXmlDocument;
 import com.reandroid.arsc.container.SpecTypePair;
+import com.reandroid.arsc.io.ReadProgress;
 import com.reandroid.arsc.item.TableString;
 import com.reandroid.arsc.model.FrameworkTable;
 import com.reandroid.arsc.pool.TableStringPool;
@@ -73,6 +74,8 @@ public class ApkModule implements ApkFile, Closeable {
     private boolean mDisableLoadFramework = false;
     private TableBlock mTableBlock;
     private InputSource mTableOriginalSource;
+    private ReadProgress mTableReadProgress;
+    private ReadProgress mFrameworkReadProgress;
     private AndroidManifestBlock mManifestBlock;
     private InputSource mManifestOriginalSource;
     private final UncompressedFiles mUncompressedFiles;
@@ -284,7 +287,21 @@ public class ApkModule implements ApkFile, Closeable {
             logMessage("Loading android framework for version: " + version);
             frameworkApk = AndroidFrameworks.getBestMatch(version);
         }
-        FrameworkTable frameworkTable = frameworkApk.getTableBlock();
+        FrameworkTable frameworkTable;
+        ReadProgress frameworkReadProgress = this.mFrameworkReadProgress;
+        if (frameworkReadProgress != null) {
+            // Frameworks are shared, so the progress is only set while this module has it parsed
+            synchronized (frameworkApk) {
+                frameworkApk.setTableReadProgress(frameworkReadProgress);
+                try {
+                    frameworkTable = frameworkApk.getTableBlock();
+                } finally {
+                    frameworkApk.setTableReadProgress(null);
+                }
+            }
+        } else {
+            frameworkTable = frameworkApk.getTableBlock();
+        }
         tableBlock.addFramework(frameworkTable);
         logMessage("Initialized framework: " + frameworkApk.getName()
                 + " (" + frameworkApk.getVersionName() + ")");
@@ -885,6 +902,22 @@ public class ApkModule implements ApkFile, Closeable {
     private void onManifestBlockLoaded(AndroidManifestBlock manifestBlock) {
         initializeApkType(manifestBlock);
     }
+    /**
+     * Receives how far parsing the resource table got, when {@link #getTableBlock()} first parses it.
+     */
+    public void setTableReadProgress(ReadProgress readProgress) {
+        this.mTableReadProgress = readProgress;
+    }
+    ReadProgress getTableReadProgress() {
+        return mTableReadProgress;
+    }
+    /**
+     * Receives how far parsing the table of the android framework got, when {@link #getTableBlock()}
+     * links the resource table to a framework whose table is not parsed yet.
+     */
+    public void setFrameworkReadProgress(ReadProgress readProgress) {
+        this.mFrameworkReadProgress = readProgress;
+    }
     public TableBlock getTableBlock(boolean initFramework) {
         TableBlock tableBlock = this.mTableBlock;
         if (tableBlock == null) {
@@ -1154,7 +1187,7 @@ public class ApkModule implements ApkFile, Closeable {
             tableBlock = (TableBlock) ((BlockInputSource<?>) inputSource).getBlock();
         } else {
             setTableOriginalSource(inputSource);
-            tableBlock = parseTableBlock(inputSource);
+            tableBlock = parseTableBlock(inputSource, mTableReadProgress);
         }
         BlockInputSource<TableBlock> blockInputSource = new BlockInputSource<>(
                 inputSource.getName(), tableBlock);
@@ -1331,12 +1364,12 @@ public class ApkModule implements ApkFile, Closeable {
         if (inputSource == null || inputSource instanceof BlockInputSource) {
             return null;
         }
-        return parseTableBlock(inputSource);
+        return parseTableBlock(inputSource, null);
     }
-    private static TableBlock parseTableBlock(InputSource inputSource) throws IOException {
+    private static TableBlock parseTableBlock(InputSource inputSource, ReadProgress readProgress) throws IOException {
         InputStream inputStream = inputSource.openStream();
         try {
-            return TableBlock.load(inputStream);
+            return TableBlock.load(inputStream, readProgress);
         } finally {
             inputStream.close();
         }

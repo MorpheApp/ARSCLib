@@ -71,6 +71,9 @@ public abstract class ApkWriter<T extends ZipOutput, OUT extends OutputSource> i
             if(i % 100 == 0){
                 out.logFileWrite();
             }
+            if(writeProgress != null){
+                writeProgress.onWriteFile(out.getInputSource().getAlias(), i + 1, length);
+            }
         }
     }
     void closeBuffer() throws IOException{

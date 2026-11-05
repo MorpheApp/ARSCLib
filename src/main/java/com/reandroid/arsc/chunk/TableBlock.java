@@ -22,6 +22,7 @@ import com.reandroid.arsc.header.HeaderBlock;
 import com.reandroid.arsc.header.InfoHeader;
 import com.reandroid.arsc.header.TableHeader;
 import com.reandroid.arsc.io.BlockReader;
+import com.reandroid.arsc.io.ReadProgress;
 import com.reandroid.arsc.model.ResourceEntry;
 import com.reandroid.arsc.model.ResourceName;
 import com.reandroid.arsc.pool.TableStringPool;
@@ -684,7 +685,11 @@ public class TableBlock extends Chunk<TableHeader>
         super.readBytes(reader);
     }
     public void readBytes(InputStream inputStream) throws IOException{
+        readBytes(inputStream, null);
+    }
+    public void readBytes(InputStream inputStream, ReadProgress readProgress) throws IOException{
         BlockReader reader=new BlockReader(inputStream);
+        reader.setReadProgress(readProgress);
         super.readBytes(reader);
     }
     public final int writeBytes(File file) throws IOException{
@@ -856,8 +861,11 @@ public class TableBlock extends Chunk<TableHeader>
         return load(new FileInputStream(file));
     }
     public static TableBlock load(InputStream inputStream) throws IOException{
+        return load(inputStream, null);
+    }
+    public static TableBlock load(InputStream inputStream, ReadProgress readProgress) throws IOException{
         TableBlock tableBlock=new TableBlock();
-        tableBlock.readBytes(inputStream);
+        tableBlock.readBytes(inputStream, readProgress);
         return tableBlock;
     }
     public static TableBlock createEmpty() {

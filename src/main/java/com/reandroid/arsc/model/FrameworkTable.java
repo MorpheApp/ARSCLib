@@ -23,6 +23,7 @@ import com.reandroid.arsc.chunk.PackageBlock;
 import com.reandroid.arsc.chunk.TableBlock;
 import com.reandroid.arsc.container.SpecTypePair;
 import com.reandroid.arsc.header.HeaderBlock;
+import com.reandroid.arsc.io.ReadProgress;
 import com.reandroid.arsc.item.ReferenceItem;
 import com.reandroid.arsc.item.TableString;
 import com.reandroid.arsc.pool.TableStringPool;
@@ -312,8 +313,11 @@ public class FrameworkTable extends TableBlock {
         return load(new FileChannelInputStream(file));
     }
     public static FrameworkTable load(InputStream inputStream) throws IOException{
+        return load(inputStream, null);
+    }
+    public static FrameworkTable load(InputStream inputStream, ReadProgress readProgress) throws IOException{
         FrameworkTable frameworkTable=new FrameworkTable();
-        frameworkTable.readBytes(inputStream);
+        frameworkTable.readBytes(inputStream, readProgress);
         return frameworkTable;
     }
 

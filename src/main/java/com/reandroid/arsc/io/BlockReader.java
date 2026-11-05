@@ -30,6 +30,7 @@ public class BlockReader extends InputStream {
     private int mPosition;
     private boolean mIsClosed;
     private int mMark;
+    private ReadProgress mReadProgress;
 
     public BlockReader(byte[] buffer, int start, int length) {
         this.BUFFER = buffer;
@@ -81,7 +82,14 @@ public class BlockReader extends InputStream {
         return TypeHeader.read(this);
     }
     public InfoHeader readHeaderBlock() throws IOException {
+        ReadProgress readProgress = this.mReadProgress;
+        if(readProgress != null){
+            readProgress.onRead(getPosition(), length());
+        }
         return InfoHeader.read(this);
+    }
+    public void setReadProgress(ReadProgress readProgress){
+        this.mReadProgress = readProgress;
     }
     private int toInt(byte[] bytes){
         return bytes[0] & 0xff |
