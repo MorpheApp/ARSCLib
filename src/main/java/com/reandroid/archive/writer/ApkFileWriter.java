@@ -80,8 +80,11 @@ public class ApkFileWriter extends ApkWriter<ZipFileOutput, FileOutputSource> {
                     output.position());
             fileOutputSource.makeBuffer(input, output);
         }
+        // The table is the largest entry by far, and it is written into the archive as it is encoded rather
+        // than to the buffer first. It is encoded after every other entry, which can add to it, as the
+        // entries are all in the buffer before the archive is written.
         if(tableSource != null){
-            tableSource.makeBuffer(input, output);
+            tableSource.prepareDirectWrite();
         }
         output.close();
         return input;

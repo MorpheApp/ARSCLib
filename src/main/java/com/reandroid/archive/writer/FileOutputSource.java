@@ -25,9 +25,25 @@ import java.nio.channels.FileChannel;
 
 class FileOutputSource extends OutputSource {
     private EntryBuffer entryBuffer;
+    private boolean writeDirectly;
 
     FileOutputSource(InputSource inputSource){
         super(inputSource);
+    }
+    /**
+     * Prepares this entry to be written into the archive as it is encoded, instead of to the buffer
+     * first, unless it can be copied as it is from the archive it is from.
+     */
+    void prepareDirectWrite() {
+        if (entryBuffer != null) {
+            return;
+        }
+        EntryBuffer entryBuffer = makeFromEntry();
+        if (entryBuffer != null) {
+            this.entryBuffer = entryBuffer;
+        } else {
+            writeDirectly = true;
+        }
     }
     void makeBuffer(BufferFileInput input, BufferFileOutput output) throws IOException {
         EntryBuffer entryBuffer = this.entryBuffer;
@@ -51,12 +67,39 @@ class FileOutputSource extends OutputSource {
         return null;
     }
     void writeApk(ZipFileOutput zipFileOutput, ZipAligner zipAligner) throws IOException{
+        if (writeDirectly) {
+            writeApkDirectly(zipFileOutput, zipAligner);
+            return;
+        }
         logLargeFileWrite();
         EntryBuffer entryBuffer = this.entryBuffer;
         FileChannel input = entryBuffer.getZipFileInput().getFileChannel();
         input.position(entryBuffer.getOffset());
         writeLFH(zipFileOutput, zipAligner);
         writeData(input, entryBuffer.getLength(), zipFileOutput);
+        writeDD(zipFileOutput);
+    }
+    /**
+     * Writes the header, then the data as it is encoded, and then the header again with the sizes and
+     * checksum of the data, which are known only once it is written. The header keeps its length, so the
+     * data stays where it is aligned.
+     */
+    private void writeApkDirectly(ZipFileOutput zipFileOutput, ZipAligner zipAligner) throws IOException {
+        LocalFileHeader lfh = getLocalFileHeader();
+        long headerOffset = zipFileOutput.position();
+        writeLFH(zipFileOutput, zipAligner);
+        long dataOffset = zipFileOutput.position();
+        lfh.setFileOffset(dataOffset);
+        writeBuffer(zipFileOutput);
+        long dataEnd = zipFileOutput.position();
+
+        zipFileOutput.position(headerOffset);
+        lfh.writeBytes(zipFileOutput.getOutputStream());
+        if (zipFileOutput.position() != dataOffset) {
+            throw new IOException("Header of " + getInputSource().getAlias() + " changed length after its data was written");
+        }
+        zipFileOutput.position(dataEnd);
+        logLargeFileWrite();
         writeDD(zipFileOutput);
     }
     private void writeData(FileChannel input, long length, ZipFileOutput apkFileWriter) throws IOException{
