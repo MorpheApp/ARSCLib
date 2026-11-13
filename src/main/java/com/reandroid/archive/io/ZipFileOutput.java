@@ -35,6 +35,10 @@ public class ZipFileOutput extends ZipOutput{
         return file;
     }
     public void write(FileChannel input, long length) throws IOException{
+        if(length <= BUFFERED_COPY_LIMIT){
+            getOutputStream().write(input, length);
+            return;
+        }
         flushOutputStream();
         FileChannel fileChannel = getFileChannel();
         long pos = fileChannel.position();
@@ -53,8 +57,10 @@ public class ZipFileOutput extends ZipOutput{
 
     @Override
     public long position() throws IOException {
-        flushOutputStream();
-        return getFileChannel().position();
+        // Counts what is still buffered rather than writing it, as every entry asks for its offset
+        FileChannelOutputStream outputStream = this.outputStream;
+        long buffered = outputStream != null ? outputStream.getBufferedLength() : 0;
+        return getFileChannel().position() + buffered;
     }
     @Override
     public void position(long pos) throws IOException {
@@ -136,4 +142,7 @@ public class ZipFileOutput extends ZipOutput{
         }
         file.createNewFile();
     }
+
+    /** Entries up to this size are copied through the stream buffer, larger ones channel to channel. */
+    private static final long BUFFERED_COPY_LIMIT = 1024 * 1024;
 }

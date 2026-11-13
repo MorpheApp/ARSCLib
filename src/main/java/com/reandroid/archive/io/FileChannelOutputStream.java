@@ -15,6 +15,7 @@
  */
 package com.reandroid.archive.io;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -65,6 +66,32 @@ public class FileChannelOutputStream extends OutputStream {
         buffer.flip();
         writeFully(buffer);
         buffer.clear();
+    }
+    /**
+     * Copies the next length bytes of input, from its current position, through the buffer. A small
+     * entry then costs a read and no write of its own, where a transfer between the channels maps and
+     * writes each one separately.
+     */
+    public void write(FileChannel input, long length) throws IOException {
+        ByteBuffer buffer = this.buffer;
+        long remaining = length;
+        while (remaining > 0){
+            if(!buffer.hasRemaining()){
+                flush();
+            }
+            int limit = buffer.position() + (int) Math.min(buffer.remaining(), remaining);
+            buffer.limit(limit);
+            int read = input.read(buffer);
+            buffer.limit(buffer.capacity());
+            if(read < 0){
+                throw new EOFException("Input ended " + remaining + " of " + length + " bytes early");
+            }
+            remaining -= read;
+        }
+    }
+    /** The bytes written to the stream that have not reached the channel yet. */
+    public int getBufferedLength() {
+        return buffer.position();
     }
     private void writeFully(ByteBuffer byteBuffer) throws IOException {
         FileChannel fileChannel = this.fileChannel;
