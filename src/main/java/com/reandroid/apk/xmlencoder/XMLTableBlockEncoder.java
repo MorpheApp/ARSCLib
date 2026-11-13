@@ -128,6 +128,8 @@ public class XMLTableBlockEncoder {
         XmlPullParser parser = XMLFactory.newPullParser(pubXmlFile);
         PackageBlock packageBlock = tableBlock.parsePublicXml(parser);
         IOUtil.close(parser);
+        // Lets a caller find the package built from a public.xml, see TableBlock#getPackageBlockByTag
+        packageBlock.setTag(pubXmlFile);
         return packageBlock;
     }
     private void initializeFrameworkFromManifest(List<File> pubXmlFileList) throws  IOException {
