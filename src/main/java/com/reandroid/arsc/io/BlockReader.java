@@ -38,6 +38,8 @@ public class BlockReader extends InputStream {
     private boolean mIsClosed;
     private int mMark;
     private ReadProgress mReadProgress;
+    private int mProgressOffset;
+    private int mProgressLength;
 
     public BlockReader(byte[] buffer, int start, int length) {
         this.buffer = buffer;
@@ -85,8 +87,14 @@ public class BlockReader extends InputStream {
     public byte[] buffer() {
         return buffer;
     }
+    /**
+     * Sets the listener told how far reading this reader got. Readers created from this one tell
+     * it too, counting from the start of this one.
+     */
     public void setReadProgress(ReadProgress readProgress) {
         this.mReadProgress = readProgress;
+        this.mProgressOffset = 0;
+        this.mProgressLength = length();
     }
     /**
      * Tells the progress listener, if any, how far reading got. Called at the start of each chunk.
@@ -94,7 +102,7 @@ public class BlockReader extends InputStream {
     public void reportProgress() {
         ReadProgress readProgress = this.mReadProgress;
         if (readProgress != null) {
-            readProgress.onRead(position(), length());
+            readProgress.onRead(mProgressOffset + position(), mProgressLength);
         }
     }
     public byte[] getBytes() {
@@ -118,8 +126,14 @@ public class BlockReader extends InputStream {
         if (length < 0 || max > this.mLength) {
             length = this.mLength - start;
         }
-        start = start + this.mStart;
-        return new BlockReader(buffer(), start, length);
+        BlockReader reader = new BlockReader(buffer(), start + this.mStart, length);
+        ReadProgress readProgress = this.mReadProgress;
+        if (readProgress != null) {
+            reader.mReadProgress = readProgress;
+            reader.mProgressOffset = this.mProgressOffset + start;
+            reader.mProgressLength = this.mProgressLength;
+        }
+        return reader;
     }
 
     public int length() {
