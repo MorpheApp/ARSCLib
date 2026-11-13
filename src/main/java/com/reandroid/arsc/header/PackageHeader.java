@@ -16,82 +16,104 @@
 package com.reandroid.arsc.header;
 
 import com.reandroid.arsc.chunk.ChunkType;
-import com.reandroid.arsc.container.SingleBlockContainer;
+import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.item.FixedLengthString;
 import com.reandroid.arsc.item.IntegerItem;
+import com.reandroid.arsc.item.IntegerReference;
+import com.reandroid.arsc.item.StringReference;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 public class PackageHeader extends HeaderBlock {
 
-    private final IntegerItem packageId;
-    private final FixedLengthString packageName;
-
-    private final IntegerItem typeStringPoolOffset;
-    private final IntegerItem typeStringPoolCount;
-    private final IntegerItem specStringPoolOffset;
-    private final IntegerItem specStringPoolCount;
-    private final SingleBlockContainer<IntegerItem> typeIdOffsetContainer;
-    private final IntegerItem typeIdOffset;
-
     public PackageHeader() {
-        super(ChunkType.PACKAGE.ID);
-        this.packageId = new IntegerItem();
-        this.packageName = new FixedLengthString(256);
+        super(7, ChunkType.PACKAGE);
 
-        this.typeStringPoolOffset = new IntegerItem();
-        this.typeStringPoolCount = new IntegerItem();
-        this.specStringPoolOffset = new IntegerItem();
-        this.specStringPoolCount = new IntegerItem();
-
-        this.typeIdOffsetContainer = new SingleBlockContainer<>();
-        this.typeIdOffset = new IntegerItem();
-        this.typeIdOffsetContainer.setItem(typeIdOffset);
-
-        addChild(this.packageId);
-        addChild(this.packageName);
-        addChild(this.typeStringPoolOffset);
-        addChild(this.typeStringPoolCount);
-        addChild(this.specStringPoolOffset);
-        addChild(this.specStringPoolCount);
-        addChild(this.typeIdOffsetContainer);
+        setupBlock(3, new IntegerItem());                      // packageId
+        setupBlock(4, new FixedLengthString(256));  // packageName
+        setupBlock(5, new IntegerItem());                      // typeStringPoolOffset
+        setupBlock(6, new IntegerItem());                      // typeStringPoolCount
+        setupBlock(7, new IntegerItem());                      // specStringPoolOffset
+        setupBlock(8, new IntegerItem());                      // specStringPoolCount
+        setupBlock(9, new TypeIdOffset());                     // typeIdOffset
     }
 
-    public IntegerItem getPackageId() {
-        return packageId;
+    public IntegerReference packageId() {
+        return block(3);
     }
-    public FixedLengthString getPackageName() {
-        return packageName;
+    public StringReference packageName() {
+        return block(4);
     }
-    public IntegerItem getTypeStringPoolOffset() {
-        return typeStringPoolOffset;
+    public IntegerReference typeStringPoolOffset() {
+        return block(5);
     }
-    public IntegerItem getTypeStringPoolCount() {
-        return typeStringPoolCount;
+    public IntegerReference typeStringPoolCount() {
+        return block(6);
     }
-    public IntegerItem getSpecStringPoolOffset() {
-        return specStringPoolOffset;
+    public IntegerReference specStringPoolOffset() {
+        return block(7);
     }
-    public IntegerItem getSpecStringPoolCount() {
-        return specStringPoolCount;
+    public IntegerReference specStringPoolCount() {
+        return block(8);
     }
-    public IntegerItem getTypeIdOffsetItem() {
-        return typeIdOffset;
+    public IntegerReference typeIdOffset() {
+        return block(9);
     }
     public void setTypeIdOffset(int offset) {
-        typeIdOffset.set(offset);
-        typeIdOffsetContainer.setItem(typeIdOffset);
+        typeIdOffset().set(offset);
     }
     public int getTypeIdOffset() {
-        if (typeIdOffset.getParent() == null) {
-            typeIdOffset.set(0);
-        }
-        return typeIdOffset.get();
+        return typeIdOffset().get();
     }
-    @Override
-    void onHeaderSizeLoaded(int size) {
-        super.onHeaderSizeLoaded(size);
-        if (size < 288) {
-            typeIdOffset.set(0);
-            typeIdOffsetContainer.setItem(null);
+
+    static class TypeIdOffset extends IntegerItem {
+
+        TypeIdOffset() {
+        }
+
+        private PackageHeader header() {
+            return getParentInstance(PackageHeader.class);
+        }
+        @Override
+        public int get() {
+            if (isNull()) {
+                return 0;
+            }
+            return super.get();
+        }
+        @Override
+        public void set(int value) {
+            IntegerReference headerSize = header().headerSize();
+            if (value == 0) {
+                if (headerSize.get() >= 288) {
+                    headerSize.set(284);
+                }
+            } else if (headerSize.get() < 288) {
+                headerSize.set(288);
+            }
+            super.set(value);
+        }
+
+        @Override
+        public boolean isNull() {
+            return header().headerSize().get() < 288;
+        }
+
+        @Override
+        public void readBytes(BlockReader reader) throws IOException {
+            if (isNull()) {
+                return;
+            }
+            super.readBytes(reader);
+        }
+
+        @Override
+        public int readBytes(InputStream inputStream) throws IOException {
+            if (isNull()) {
+                return 0;
+            }
+            return super.readBytes(inputStream);
         }
     }
 }

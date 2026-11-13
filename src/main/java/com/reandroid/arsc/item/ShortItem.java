@@ -35,6 +35,10 @@ public class ShortItem extends BlockItem implements IntegerReference, DirectStre
         this(false);
         set(value);
     }
+    public ShortItem(int value){
+        this(false);
+        set(value);
+    }
 
     @Override
     public void set(int value){
@@ -42,7 +46,7 @@ public class ShortItem extends BlockItem implements IntegerReference, DirectStre
             return;
         }
         mCache = value;
-        byte[] bytes = getBytesInternal();
+        byte[] bytes = bytes();
         if (bigEndian) {
             putBigEndianShort(bytes, 0, value);
         } else {
@@ -68,7 +72,7 @@ public class ShortItem extends BlockItem implements IntegerReference, DirectStre
     @Override
     protected void onBytesChanged() {
         int s;
-        byte[] bytes = getBytesInternal();
+        byte[] bytes = bytes();
         if (bigEndian) {
             s = getBigEndianShort(bytes, 0);
         } else {

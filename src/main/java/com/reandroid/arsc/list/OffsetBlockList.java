@@ -55,7 +55,7 @@ public class OffsetBlockList<T extends Block> extends BlockList<T> {
         return size() == 0;
     }
     public void clear() {
-        clearChildes();
+        clearBlocks();
     }
     public AlignItem getAlignment() {
         return null;
@@ -113,7 +113,7 @@ public class OffsetBlockList<T extends Block> extends BlockList<T> {
     }
 
     @Override
-    protected void refreshChildes() {
+    protected void refreshBlockElements() {
         int size = size();
         if (size != 0) {
             Block first = getFirst();
@@ -135,20 +135,20 @@ public class OffsetBlockList<T extends Block> extends BlockList<T> {
     }
 
     @Override
-    protected void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         if (getOffsetReferenceList().size() != 0) {
             int position = getStart().get();
-            reader.seek(position);
+            reader.position(position);
             BlockReader listReader = reader.create(reader.available());
-            readChildes(listReader);
-            position = position + listReader.getPosition();
+            readBlockElements(listReader);
+            position = position + listReader.position();
             listReader.close();
-            reader.seek(position);
+            reader.position(position);
         }
     }
 
     @Override
-    public void readChildes(BlockReader reader) throws IOException {
+    public void readBlockElements(BlockReader reader) throws IOException {
         OffsetReferenceList<?> referenceList = getOffsetReferenceList();
         int size = referenceList.size();
         this.setSize(size);

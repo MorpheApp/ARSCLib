@@ -39,7 +39,7 @@ public class OffsetReferenceList<T extends OffsetItem> extends BlockList<T> impl
     }
 
     public void clear() {
-        clearChildes();
+        clearBlocks();
     }
     @Override
     public void setSize(int size) {
@@ -48,16 +48,16 @@ public class OffsetReferenceList<T extends OffsetItem> extends BlockList<T> impl
     }
 
     @Override
-    protected boolean hasSimilarEntries() {
+    protected boolean hasSameByteSizeEntries() {
         return true;
     }
 
     @Override
-    protected void refreshChildes() {
+    protected void refreshBlockElements() {
     }
 
     @Override
-    protected void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         int size = getCountReference().get();
         setSize(size);
         for (int i = 0; i < size; i++) {

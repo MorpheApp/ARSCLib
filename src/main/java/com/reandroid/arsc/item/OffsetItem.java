@@ -60,7 +60,7 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         return bytes;
     }
     @Override
-    protected byte[] getBytesInternal() {
+    public byte[] bytes() {
         return encode();
     }
     @Override
@@ -86,7 +86,7 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         return bytesLength();
     }
     @Override
-    public void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         byte[] bytes = new byte[bytesLength()];
         reader.readFully(bytes);
         decode(bytes);
@@ -103,13 +103,12 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
             offset += read;
         }
         decode(bytes);
-        super.notifyBlockLoad();
         return offset;
     }
     @Override
     public void setBytes(BlockItem blockItem) {
         if (blockItem != this) {
-            setBytesInternal(blockItem.getBytesInternal(), true);
+            setBytesInternal(blockItem.bytes(), true);
         }
     }
 
@@ -156,7 +155,7 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         boolean noEntry = isNoEntry();
         int offset = getOffset();
         if (!noEntry) {
-            int maximumPosition = reader.getPosition() + reader.available();
+            int maximumPosition = reader.position() + reader.available();
             if (offset < 0 || offset > maximumPosition) {
                 if (!ignoreOutOfRange) {
                     throw new IOException("Offset " + offset + " is out of range " + maximumPosition);
@@ -169,16 +168,16 @@ public abstract class OffsetItem extends BlockItem implements DirectStreamReader
         }
         target.setNull(noEntry);
         if (!noEntry) {
-            int position = reader.getPosition();
-            reader.seek(offset);
+            int position = reader.position();
+            reader.position(offset);
             try {
                 target.readBytes(reader);
             }catch (Exception ex) {
                 throw new IOException("Error at:" + toString() + ex.getMessage() , ex);
             }
-            int current = reader.getPosition();
+            int current = reader.position();
             if (current < position) {
-                reader.seek(position);
+                reader.position(position);
             }
         }
     }

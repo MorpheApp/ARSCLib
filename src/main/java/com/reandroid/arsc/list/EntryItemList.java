@@ -25,7 +25,7 @@ import com.reandroid.arsc.pool.SpecStringPool;
 import com.reandroid.arsc.pool.TableStringPool;
 import com.reandroid.arsc.value.Entry;
 import com.reandroid.arsc.value.ResValue;
-import com.reandroid.arsc.value.ValueType;
+import com.reandroid.arsc.value.DataType;
 import com.reandroid.json.JSONArray;
 import com.reandroid.json.JSONConvert;
 import com.reandroid.json.JSONObject;
@@ -40,7 +40,7 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     private final TypeHeader header;
 
     public EntryItemList(TypeHeader header, EntryItemOffsetList offsetList) {
-        super(header.getEntriesStart(), offsetList, Entry.CREATOR);
+        super(header.entriesStart(), offsetList, Entry.CREATOR);
         this.header = header;
         header.setOffsetTypeChangedListener(EntryItemList.this::onOffsetTypeChanged);
     }
@@ -51,7 +51,7 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     }
 
     @Override
-    public void readChildes(BlockReader reader) throws IOException {
+    public void readBlockElements(BlockReader reader) throws IOException {
         EntryItemOffsetList referenceList = getOffsetReferenceList();
         int size = referenceList.size();
         this.setSize(size);
@@ -65,13 +65,7 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     }
 
     public Entry getEntry(int entryId) {
-        int index;
-        if (isSparse()) {
-            index = getEntryIndex(entryId);
-        } else {
-            index = entryId;
-        }
-        return get(index);
+        return get(getEntryIndex(entryId));
     }
     public Entry getOrCreate(int entryId) {
         Entry entry = getEntry(entryId);
@@ -114,8 +108,15 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
         return null;
     }
 
-    public boolean isEmptyEntries() {
-        return !iterator(true).hasNext();
+    public boolean isBlank() {
+        int size = size();
+        for (int i = 0; i < size; i++) {
+            Entry entry = get(i);
+            if (entry != null && !entry.isNull()) {
+                return false;
+            }
+        }
+        return true;
     }
     public int countNonNull() {
         return countIf(NON_NULL_PREDICATE);
@@ -132,9 +133,9 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
                 return true;
             }
             ResValue resValue = entry.getResValue();
-            ValueType valueType = resValue.getValueType();
-            if (valueType == null || valueType == ValueType.REFERENCE
-                    || valueType == ValueType.NULL) {
+            DataType dataType = resValue.getDataType();
+            if (dataType == null || dataType == DataType.REFERENCE
+                    || dataType == DataType.NULL) {
                 continue;
             }
             return false;
@@ -206,22 +207,26 @@ public class EntryItemList extends OffsetBlockList<Entry> implements JSONConvert
     @Override
     protected void onRefreshed() {
         super.onRefreshed();
-        IntegerReference flags = header.getFlags();
+        IntegerReference flags = header.flags();
         flags.set((flags.get() & 0xfffffffc) | getOffsetType());
     }
 
-    public void linkTableStringsInternal(TableStringPool tableStringPool) {
-        Iterator<Entry> iterator = iterator(true);
-        while (iterator.hasNext()) {
-            Entry entry = iterator.next();
-            entry.linkTableStringsInternal(tableStringPool);
+    public void linkTableStringsInternal(TableStringPool stringPool) {
+        int size = size();
+        for (int i = 0; i < size; i++) {
+            Entry entry = get(i);
+            if (entry != null && !entry.isNull()) {
+                entry.linkTableStringsInternal(stringPool);
+            }
         }
     }
-    public void linkSpecStringsInternal(SpecStringPool specStringPool) {
-        Iterator<Entry> iterator = iterator(true);
-        while (iterator.hasNext()) {
-            Entry entry = iterator.next();
-            entry.linkSpecStringsInternal(specStringPool);
+    public void linkSpecStringsInternal(SpecStringPool stringPool) {
+        int size = size();
+        for (int i = 0; i < size; i++) {
+            Entry entry = get(i);
+            if (entry != null && !entry.isNull()) {
+                entry.linkSpecStringsInternal(stringPool);
+            }
         }
     }
 

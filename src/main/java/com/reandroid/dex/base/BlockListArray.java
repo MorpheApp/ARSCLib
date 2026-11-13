@@ -15,10 +15,7 @@
  */
 package com.reandroid.dex.base;
 
-import com.reandroid.arsc.base.Block;
-import com.reandroid.arsc.base.BlockArray;
-import com.reandroid.arsc.base.Creator;
-import com.reandroid.arsc.base.OffsetSupplier;
+import com.reandroid.arsc.base.*;
 import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.item.IntegerReference;
 import com.reandroid.dex.header.DexHeader;
@@ -35,16 +32,17 @@ public class BlockListArray<T extends Block> extends BlockArray<T>
         super(creator);
         this.countAndOffset = countAndOffset;
     }
+
     @Override
-    public int countBytes() {
+    public int countElementBytes() {
         T item = getFirst();
-        if(item instanceof FixedSizeBlock){
+        if (item instanceof FixedSizeBlock) {
             return item.countBytes() * getCount();
         }
-        return super.countBytes();
+        return super.countElementBytes();
     }
     @Override
-    public IntegerReference getOffsetReference(){
+    public IntegerReference getOffsetReference() {
         return getCountAndOffset().getSecond();
     }
     public IntegerPair getCountAndOffset() {
@@ -54,56 +52,56 @@ public class BlockListArray<T extends Block> extends BlockArray<T>
         this.countAndOffset = ParallelIntegerPair.combine(this.countAndOffset, countAndOffset);
     }
     @Override
-    public void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         IntegerPair countAndOffset = getCountAndOffset();
-        if(skipReading(countAndOffset, reader)){
+        if (skipReading(countAndOffset, reader)) {
             return;
         }
-        readChildes(reader);
+        readBlockElements(reader);
         trimToSize();
     }
-    public void readChild(BlockReader reader, T item) throws IOException{
+    public void readElementBlock(BlockReader reader, T item) throws IOException {
         positionItem(item, reader);
         item.readBytes(reader);
     }
-    private boolean skipReading(IntegerPair countAndOffset, BlockReader reader){
-        if(countAndOffset == null){
+    private boolean skipReading(IntegerPair countAndOffset, BlockReader reader) {
+        if (countAndOffset == null) {
             return false;
         }
         IntegerReference reference = countAndOffset.getSecond();
-        if(reference != null){
+        if (reference != null) {
             int offset = reference.get();
-            if(!isValidOffset(offset)){
+            if (!isValidOffset(offset)) {
                 return true;
             }
-            reader.seek(offset);
+            reader.position(offset);
         }
         return false;
     }
     @Override
-    public void readChildes(BlockReader reader) throws IOException {
+    public void readBlockElements(BlockReader reader) throws IOException {
         int count = countAndOffset.getFirst().get();
         setSize(count);
-        for(int i = 0; i < count; i++){
+        for (int i = 0; i < count; i++) {
             T item = get(i);
-            readChild(reader, item);
+            readElementBlock(reader, item);
         }
         onChanged();
     }
-    private void positionItem(Block block, BlockReader reader){
-        if(!(block instanceof PositionedItem)){
+    private void positionItem(Block block, BlockReader reader) {
+        if (!(block instanceof PositionedItem)) {
             return;
         }
         PositionedItem positionedItem = (PositionedItem) block;
-        positionedItem.setPosition(reader.getPosition());
+        positionedItem.setPosition(reader.position());
     }
-    protected boolean isValidOffset(int offset){
-        if(offset == 0){
+    protected boolean isValidOffset(int offset) {
+        if (offset == 0) {
             return isDexHeaderArray();
         }
         return offset > 0;
     }
-    private boolean isDexHeaderArray(){
+    private boolean isDexHeaderArray() {
         return (get(0) instanceof DexHeader);
     }
     @Override

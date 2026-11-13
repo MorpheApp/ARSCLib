@@ -54,7 +54,7 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
             return new EncodeResult("Missing attribute name");
         }
         return encodeStyle(validate, xmlAttribute.getPrefix(),
-                xmlAttribute.getValueAsString(),
+                xmlAttribute.getDataAsString(),
                 xmlElement.getTextContent());
     }
     public EncodeResult encodeStyle(boolean validate, String name, String value){
@@ -110,7 +110,7 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
             return "";
         }
         return AttributeDataFormat.toString(
-                AttributeDataFormat.decodeValueTypes(data));
+                AttributeDataFormat.decodeDataTypes(data));
     }
     @Override
     public String decodePrefix(){
@@ -125,8 +125,8 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
     }
     public void setAttributeType(AttributeType attributeType){
         setNameId(attributeType.getId());
-        if(attributeType == AttributeType.FORMATS && getValueType() == ValueType.NULL){
-            setValueType(ValueType.DEC);
+        if(attributeType == AttributeType.FORMATS && getDataType() == DataType.NULL){
+            setDataType(DataType.DEC);
         }
     }
     public AttributeDataFormat[] getAttributeTypeFormats(){
@@ -134,7 +134,7 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
         if(attributeType != AttributeType.FORMATS){
             return null;
         }
-        return AttributeDataFormat.decodeValueTypes(getData());
+        return AttributeDataFormat.decodeDataTypes(getData());
     }
     public void addAttributeTypeFormats(AttributeDataFormat... formats){
         if(formats == null){
@@ -142,8 +142,8 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
         }
         int data = getData() | AttributeDataFormat.sum(formats);
         setData(data);
-        if(getValueType() == ValueType.NULL){
-            setValueType(ValueType.DEC);
+        if(getDataType() == DataType.NULL){
+            setDataType(DataType.DEC);
         }
     }
     public void addAttributeTypeFormat(AttributeDataFormat format){
@@ -174,22 +174,19 @@ public class ResValueMap extends AttributeValue implements Comparable<ResValueMa
 
     @Override
     public int getNameId() {
-        return getInteger(getBytesInternal(), OFFSET_NAME);
+        return getInteger(bytes(), OFFSET_NAME);
     }
     @Override
     public void setNameId(int id){
-        putInteger(getBytesInternal(), OFFSET_NAME, id);
+        putInteger(bytes(), OFFSET_NAME, id);
     }
 
     @Override
-    public JSONObject toJson() {
-        JSONObject jsonObject = super.toJson();
-        if(jsonObject==null){
-            return null;
-        }
+    public void toJson(JSONObject jsonObject) {
         jsonObject.put(NAME_name, getNameId());
-        return jsonObject;
+        super.toJson(jsonObject);
     }
+
     @Override
     public void fromJson(JSONObject json) {
         super.fromJson(json);

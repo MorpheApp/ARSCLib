@@ -1,4 +1,4 @@
- /*
+/*
   *  Copyright (C) 2022 github.com/REAndroid
   *
   *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,23 +17,26 @@ package com.reandroid.arsc.header;
 
 import com.reandroid.arsc.chunk.ChunkType;
 import com.reandroid.arsc.item.IntegerItem;
+import com.reandroid.arsc.item.IntegerReference;
 
-public class TableHeader extends HeaderBlock{
-    private final IntegerItem packageCount;
+public class TableHeader extends HeaderBlock {
+
     public TableHeader() {
-        super(ChunkType.TABLE.ID);
-        this.packageCount = new IntegerItem();
-        addChild(packageCount);
+        super(1, ChunkType.TABLE.ID);
+
+        setupBlock(3, new IntegerItem()); //packageCount
     }
-    public IntegerItem getPackageCount() {
-        return packageCount;
+
+    public IntegerReference packageCount() {
+        return block(3);
     }
+
     @Override
-    public String toString(){
-        if(getChunkType()!=ChunkType.TABLE){
+    public String toString() {
+        if (getChunkType() != ChunkType.TABLE) {
             return super.toString();
         }
         return getClass().getSimpleName()
-                +" {packageCount=" + getPackageCount() + '}';
+                +" {packageCount=" + packageCount() + '}';
     }
 }

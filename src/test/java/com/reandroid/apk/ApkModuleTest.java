@@ -6,15 +6,12 @@ import com.reandroid.app.AndroidManifest;
 import com.reandroid.archive.ArchiveBytes;
 import com.reandroid.archive.ByteInputSource;
 import com.reandroid.arsc.array.ResValueMapArray;
-import com.reandroid.arsc.chunk.PackageBlock;
-import com.reandroid.arsc.chunk.TableBlock;
+import com.reandroid.arsc.chunk.*;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.chunk.xml.ResXmlAttribute;
 import com.reandroid.arsc.chunk.xml.ResXmlDocument;
 import com.reandroid.arsc.chunk.xml.ResXmlElement;
-import com.reandroid.arsc.coder.CoderDimension;
-import com.reandroid.arsc.coder.EncodeResult;
-import com.reandroid.arsc.coder.ValueCoder;
+import com.reandroid.arsc.coder.*;
 import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.item.TableString;
 import com.reandroid.arsc.model.ResourceEntry;
@@ -36,6 +33,7 @@ import org.junit.runners.MethodSorters;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Iterator;
 import java.util.List;
 import java.util.zip.ZipEntry;
 
@@ -119,34 +117,43 @@ public class ApkModuleTest {
         root.setName("LinearLayout");
 
         ResXmlAttribute attribute = root.getOrCreateAndroidAttribute("layout_width", 0x010100f4);
-        attribute.setTypeAndData(ValueType.DEC, -1); // match_parent
+        attribute.setTypeAndData(DataType.DEC, -1); // match_parent
 
         attribute = root.getOrCreateAndroidAttribute("layout_height", 0x010100f5);
-        attribute.setTypeAndData(ValueType.DEC, -1); // match_parent
+        attribute.setTypeAndData(DataType.DEC, -1); // match_parent
 
         attribute = root.getOrCreateAndroidAttribute("orientation", 0x010100c4);
-        attribute.setTypeAndData(ValueType.DEC, 1); // vertical
+        attribute.setTypeAndData(DataType.DEC, 1); // vertical
 
         attribute = root.getOrCreateAndroidAttribute("padding", 0x010100d5);
-        attribute.setValue(CoderDimension.INS.encode("20.0dp"));
+        attribute.setData(CoderDimension.INS.encode("20.0dp"));
+
+        root.getOrCreateAndroidAttribute("gravity", 0x010100af)
+                .setTypeAndData(DataType.HEX, 0x00000011); // center
+
+        root.getOrCreateAndroidAttribute("background", 0x010100d4)
+                .setData(CoderColorARGB8.INS.encode("#ff1c1c1c"));
 
         ResXmlElement textView = root.newElement("TextView");
+
         attribute = textView.getOrCreateAndroidAttribute("layout_width", 0x010100f4);
-        attribute.setTypeAndData(ValueType.DEC, -1); // wrap_content
+        attribute.setTypeAndData(DataType.DEC, -1); // wrap_content
+
 
         attribute = textView.getOrCreateAndroidAttribute("layout_height", 0x010100f5);
-        attribute.setTypeAndData(ValueType.DEC, -2); // wrap_content
+        attribute.setTypeAndData(DataType.DEC, -2); // wrap_content
+
 
         TableBlock tableBlock = apkModule.getTableBlock();
         PackageBlock packageBlock = tableBlock.pickOne();
 
         Entry idEntry = packageBlock.getOrCreate("", "id", "tv1");
-        idEntry.setValueAsBoolean(false);
+        idEntry.setDataAsBoolean(false);
         idEntry.getHeader().setPublic(true);
         idEntry.getHeader().setWeak(true);
 
         attribute = textView.getOrCreateAndroidAttribute("id", 0x010100d0);
-        attribute.setTypeAndData(ValueType.REFERENCE, idEntry.getResourceId());
+        attribute.setTypeAndData(DataType.REFERENCE, idEntry.getResourceId());
 
         attribute = textView.getOrCreateAndroidAttribute("text", 0x0101014f);
 
@@ -155,7 +162,7 @@ public class ApkModuleTest {
         String text = "<hr /><br><font color=\"green\" size=\"30\">Hello World</font></br>" +
                 "<ul>" +
                 "<li><b>\nType id offset = " +
-                helloEntry.getPackageBlock().getHeaderBlock().getTypeIdOffsetItem().get() +
+                helloEntry.getPackageBlock().getHeaderBlock().typeIdOffset().get() +
                 "</b></li>" +
                 "<li><b>\nType = " +
                 helloEntry.getTypeName() +
@@ -175,11 +182,15 @@ public class ApkModuleTest {
                 "</ul>";
         StyleDocument styleDocument = StyleDocument.create(text);
         Assert.assertNotNull(styleDocument);
-        helloEntry.setValueAsString(styleDocument);
-        Assert.assertEquals(text, helloEntry.getResValue().getValueAsString());
-        attribute.setTypeAndData(ValueType.REFERENCE, helloEntry.getResourceId());
+        helloEntry.setDataAsString(styleDocument);
+        Assert.assertEquals(text, helloEntry.getResValue().getDataAsString());
+        attribute.setTypeAndData(DataType.REFERENCE, helloEntry.getResourceId());
 
         createStyledStringInXmlDocument(root);
+
+        for (PackageBlock pkg : tableBlock) {
+            createTextViewEntryOnPackage(pkg, root);
+        }
 
         document.refreshFull();
 
@@ -189,19 +200,40 @@ public class ApkModuleTest {
         apkModule.add(source);
 
         Entry layoutEntry = tableBlock.pickOne().getOrCreate("", "layout", "activity_main");
-        layoutEntry.setValueAsString(path);
+        layoutEntry.setDataAsString(path);
 
 
         return layoutEntry.getResourceId();
+    }
+    private void createTextViewEntryOnPackage(PackageBlock packageBlock, ResXmlElement root) {
+
+
+        String name = "test_string_entry_on_multi_packages";
+
+        Entry entry = packageBlock.getOrCreate(
+                ResConfig.getDefault(), "string", name);
+        entry.setDataAsString("String entry @string/" + name + " on package: "
+                + packageBlock.getName());
+
+        ResXmlElement textView = root.newElement("TextView");
+
+        textView.getOrCreateAndroidAttribute("layout_width", 0x010100f4)
+                .setTypeAndData(DataType.DEC, -1); // wrap_content
+        textView.getOrCreateAndroidAttribute("layout_height", 0x010100f5)
+                .setTypeAndData(DataType.DEC, -2); // wrap_content
+        textView.getOrCreateAndroidAttribute("layout_marginTop", 0x010100f8)
+                .setData(CoderDimension.INS.encode("12.0dp"));
+        textView.getOrCreateAndroidAttribute("text", 0x0101014f)
+                .setTypeAndData(DataType.REFERENCE, entry.getResourceId());
     }
     private void createStyledStringInXmlDocument(ResXmlElement root) {
 
         ResXmlElement textView2 = root.newElement("TextView");
         ResXmlAttribute attribute = textView2.getOrCreateAndroidAttribute("layout_width", 0x010100f4);
-        attribute.setTypeAndData(ValueType.DEC, -1); // wrap_content
+        attribute.setTypeAndData(DataType.DEC, -1); // wrap_content
 
         attribute = textView2.getOrCreateAndroidAttribute("layout_height", 0x010100f5);
-        attribute.setTypeAndData(ValueType.DEC, -2); // wrap_content
+        attribute.setTypeAndData(DataType.DEC, -2); // wrap_content
 
         attribute = textView2.getOrCreateAndroidAttribute("linksClickable", 0x010100b1);
         attribute.setValueAsBoolean(true);
@@ -223,12 +255,12 @@ public class ApkModuleTest {
         StyleDocument styleDocument = StyleDocument.create(text);
         Assert.assertNotNull(styleDocument);
 
-        attribute.setValueAsString(styleDocument);
+        attribute.setDataAsString(styleDocument);
     }
     private TableBlock createTableBlock(AndroidManifestBlock manifestBlock){
         TableBlock tableBlock = new TableBlock();
         String packageName = manifestBlock.getPackageName();
-        int packageId = 0x7f;
+        int packageId = TestUtils.MAIN_PACKAGE_ID;
         PackageBlock packageBlock = tableBlock.newPackage(
                 packageId, packageName);
         packageBlock.getHeaderBlock().setTypeIdOffset(0);
@@ -242,15 +274,15 @@ public class ApkModuleTest {
         TableString tableString = pool.getOrCreate(xmlDocument);
         Entry someStyle = packageBlock.getOrCreate("", "string", "some_style");
 
-        someStyle.setValueAsRaw(ValueType.STRING, tableString.getIndex());
+        someStyle.setDataAsRaw(DataType.STRING, tableString.getIndex());
 
         String app_name = "ARSCLib Test";
         Entry appName = packageBlock.getOrCreate("", "string", "app_name");
-        appName.setValueAsString(app_name);
-        packageBlock.getOrCreate("-en-rUS-watch", "string", "app_name").setValueAsString(app_name + "-en-rUS-watch");
-        packageBlock.getOrCreate("-en", "string", "app_name").setValueAsString(app_name + "-en");
-        packageBlock.getOrCreate("-en-rUS", "string", "app_name").setValueAsString(app_name + "-en-rUS");
-        packageBlock.getOrCreate("-en-rCA", "string", "app_name").setValueAsString(app_name + "-en-rCA");
+        appName.setDataAsString(app_name);
+        packageBlock.getOrCreate("-en-rUS-watch", "string", "app_name").setDataAsString(app_name + "-en-rUS-watch");
+        packageBlock.getOrCreate("-en", "string", "app_name").setDataAsString(app_name + "-en");
+        packageBlock.getOrCreate("-en-rUS", "string", "app_name").setDataAsString(app_name + "-en-rUS");
+        packageBlock.getOrCreate("-en-rCA", "string", "app_name").setDataAsString(app_name + "-en-rCA");
 
         ReferenceResolver referenceResolver = new ReferenceResolver(packageBlock.getTableBlock());
         List<Entry> entryList = referenceResolver.resolveWithConfig(appName.getResourceId(), ResConfig.parse("-en"));
@@ -267,7 +299,7 @@ public class ApkModuleTest {
         Assert.assertEquals("package pick one", packageBlock, tableBlock.pickOne());
 
         Assert.assertNotNull(appName.getResValue());
-        Assert.assertEquals(app_name, appName.getResValue().getValueAsString());
+        Assert.assertEquals(app_name, appName.getResValue().getDataAsString());
         Assert.assertNotNull("Table search by name", tableBlock.getResource(
                 packageBlock.getName(),
                 appName.getTypeName(), appName.getName()));
@@ -283,11 +315,11 @@ public class ApkModuleTest {
 
         Entry appName_de = packageBlock.getOrCreate("-de-rDE", "string", "app_name");
         Assert.assertNotNull("Config entry - de", appName_de);
-        appName_de.setValueAsString(app_name + " - Bewerbung");
+        appName_de.setDataAsString(app_name + " - Bewerbung");
 
         Assert.assertNotEquals(appName.getResConfig(), appName_de.getResConfig());
-        Assert.assertNotEquals(appName.getResValue().getValueAsString(),
-                appName_de.getResValue().getValueAsString());
+        Assert.assertNotEquals(appName.getResValue().getDataAsString(),
+                appName_de.getResValue().getDataAsString());
 
         ResourceEntry resourceEntry = tableBlock.getLocalResource(appName_de.getResourceId());
         Assert.assertNotNull("getLocalResource by id", resourceEntry);
@@ -296,11 +328,11 @@ public class ApkModuleTest {
 
         Entry appName_ru = resourceEntry.getOrCreate("-ru-rRU");
         Assert.assertNotNull("Config entry - ru", appName_ru);
-        appName_ru.setValueAsString(app_name + " - заявление");
+        appName_ru.setDataAsString(app_name + " - заявление");
 
         Assert.assertNotEquals(appName_de.getResConfig(), appName_ru.getResConfig());
-        Assert.assertNotEquals(appName_de.getResValue().getValueAsString(),
-                appName_ru.getResValue().getValueAsString());
+        Assert.assertNotEquals(appName_de.getResValue().getDataAsString(),
+                appName_ru.getResValue().getDataAsString());
 
         Assert.assertEquals("Configs count", 7, resourceEntry.getConfigsCount());
 
@@ -314,7 +346,7 @@ public class ApkModuleTest {
 
         Entry appIcon = packageBlock.getOrCreate("", "drawable", "ic_launcher");
         EncodeResult encodeResult = ValueCoder.encode("#006400");
-        appIcon.setValueAsRaw(encodeResult.valueType, encodeResult.value);
+        appIcon.setDataAsRaw(encodeResult.dataType, encodeResult.value);
 
         manifestBlock.setIconResourceId(appIcon.getResourceId());
 
@@ -326,6 +358,11 @@ public class ApkModuleTest {
         testCreateDynamicReference(packageBlock);
         createBooleanValues(packageBlock);
 
+        createLibraries(packageBlock);
+        createOverlayables(packageBlock);
+        createStageAlias(packageBlock);
+
+        addMorePackages(tableBlock);
         tableBlock.refreshFull();
 
         return tableBlock;
@@ -333,16 +370,16 @@ public class ApkModuleTest {
     private void createMoreStrings(PackageBlock packageBlock){
         Entry entry = packageBlock
                 .getOrCreate("", "string", "test_1");
-        entry.setValueAsString("@integer/value");
+        entry.setDataAsString("@integer/value");
         ResValue resValue = entry.getResValue();
         Assert.assertNotNull("resValue", resValue);
-        Assert.assertEquals("@integer/value", resValue.getValueAsString());
+        Assert.assertEquals("@integer/value", resValue.getDataAsString());
 
         entry = packageBlock
                 .getOrCreate("", "string", "test_issue_apkeditor_65");
-        entry.setValueAsString("3");
+        entry.setDataAsString("3");
         resValue = entry.getResValue();
-        Assert.assertEquals("3", resValue.getValueAsString());
+        Assert.assertEquals("3", resValue.getDataAsString());
 
         createMoreStrings_65(packageBlock);
         createMoreStrings_62(packageBlock);
@@ -352,9 +389,9 @@ public class ApkModuleTest {
         Entry entry = packageBlock
                 .getOrCreate("", "string", "test_issue_apkeditor_65");
         String text = "3";
-        entry.setValueAsString(text);
+        entry.setDataAsString(text);
         ResValue resValue = entry.getResValue();
-        Assert.assertEquals(text, resValue.getValueAsString());
+        Assert.assertEquals(text, resValue.getDataAsString());
     }
     private void createMoreStrings_62(PackageBlock packageBlock){
 
@@ -371,7 +408,7 @@ public class ApkModuleTest {
         }
         Assert.assertNull(exception);
         Assert.assertNotNull(styleDocument);
-        entry.setValueAsString(styleDocument);
+        entry.setDataAsString(styleDocument);
         ResValue resValue = entry.getResValue();
         TableString stringItem = (TableString) resValue.getDataAsPoolString();
         StyleDocument document = stringItem.getStyleDocument();
@@ -379,49 +416,138 @@ public class ApkModuleTest {
 
         packageBlock.getTableBlock().refreshFull();
 
-        Assert.assertEquals(text, resValue.getValueAsString());
+        Assert.assertEquals(text, resValue.getDataAsString());
     }
 
     private void testCreateDynamicReference(PackageBlock packageBlock) {
         Entry entry = packageBlock
                 .getOrCreate("", "color", "test_dynamic_reference");
-        entry.setValueAsRaw(ValueType.DYNAMIC_REFERENCE, 0x0196000a);
+        entry.setDataAsRaw(DataType.DYNAMIC_REFERENCE, 0x0196000a);
         entry.getHeader().setPublic(false);
 
         ResValue resValue = entry.getResValue();
         Assert.assertNotNull(resValue);
-        Assert.assertEquals(ValueType.DYNAMIC_REFERENCE, resValue.getValueType());
+        Assert.assertEquals(DataType.DYNAMIC_REFERENCE, resValue.getDataType());
         Assert.assertEquals("@@0x0196000a", resValue.decodeValue());
 
         entry = packageBlock
                 .getOrCreate("", "attr", "test_dynamic_attribute");
-        entry.setValueAsRaw(ValueType.DYNAMIC_ATTRIBUTE, 0x01940007);
+        entry.setDataAsRaw(DataType.DYNAMIC_ATTRIBUTE, 0x01940007);
         entry.getHeader().setPublic(true);
 
         resValue = entry.getResValue();
         Assert.assertNotNull(resValue);
-        Assert.assertEquals(ValueType.DYNAMIC_ATTRIBUTE, resValue.getValueType());
+        Assert.assertEquals(DataType.DYNAMIC_ATTRIBUTE, resValue.getDataType());
         Assert.assertEquals("??0x01940007", resValue.decodeValue());
     }
 
     private void createBooleanValues(PackageBlock packageBlock) {
         packageBlock.getOrCreate("-en", "bool", "test_bool_1")
-                .setValueAsBoolean(true);
+                .setDataAsBoolean(true);
         packageBlock.getOrCreate("-fr", "bool", "test_bool_1")
-                .setValueAsBoolean(false);
+                .setDataAsBoolean(false);
         packageBlock.getOrCreate("-land", "bool", "test_bool_1")
-                .setValueAsBoolean(true);
+                .setDataAsBoolean(true);
         packageBlock.getOrCreate("-hdpi", "bool", "test_bool_1")
-                .setValueAsBoolean(true);
+                .setDataAsBoolean(true);
 
         packageBlock.getOrCreate("-en", "bool", "test_bool_2")
-                .setValueAsBoolean(false);
+                .setDataAsBoolean(false);
         packageBlock.getOrCreate("-fr", "bool", "test_bool_2")
-                .setValueAsBoolean(true);
-        packageBlock.getOrCreate("-land", "bool", "test_bool_2")
-                .setValueAsBoolean(false);
-        packageBlock.getOrCreate("-hdpi", "bool", "test_bool_2")
-                .setValueAsBoolean(true);
+                .setDataAsBoolean(true);
+        packageBlock.getOrCreate("-mdpi", "bool", "test_bool_2")
+                .setDataAsBoolean(false);
+        packageBlock.getOrCreate("-en-rCA", "bool", "test_bool_3")
+                .setDataAsBoolean(true);
+
+        ResourceEntry resourceEntry1 = packageBlock
+                .getResource("bool", "test_bool_1");
+        Assert.assertNotNull("null test_bool_1", resourceEntry1);
+        Assert.assertEquals("configs test_bool_1", 4,
+                resourceEntry1.getConfigsCount());
+        Assert.assertNull("non-null [DEFAULT] test_bool_1", resourceEntry1.get(""));
+
+        Entry entry = resourceEntry1.get("-en");
+        Assert.assertNotNull("null -en test_bool_1", entry);
+        Assert.assertTrue("-en test_bool_1", entry.getDataAsBoolean());
+        entry.getOrCreateSpecFlag().add(SpecBlock.Flag.SPEC_PUBLIC);
+
+        ResourceEntry resourceEntry2 = packageBlock
+                .getResource("bool", "test_bool_2");
+        Assert.assertNotNull("null test_bool_2", resourceEntry2);
+        Assert.assertEquals("configs test_bool_2", 3,
+                resourceEntry2.getConfigsCount());
+        resourceEntry2.getOrCreateSpecFlag().add(SpecBlock.Flag.SPEC_STAGED_API);
+
+        entry = resourceEntry2.get("-mdpi");
+        Assert.assertNotNull("null -mdpi test_bool_2", entry);
+        Assert.assertNotNull("null res value -mdpi test_bool_2", entry.getResValue());
+        Assert.assertEquals("-mdpi test_bool_2", Boolean.FALSE,
+                entry.getDataAsEncoded());
+
+        Assert.assertNull("non-null [DEFAULT] test_bool_2", resourceEntry2.get(""));
+
+        ResourceEntry resourceEntry3 = packageBlock
+                .getResource("bool", "test_bool_3");
+        Assert.assertNotNull("null test_bool_3", resourceEntry3);
+        resourceEntry3.getOrCreateSpecFlag().add(SpecBlock.Flag.SPEC_PUBLIC);
+        resourceEntry3.getOrCreateSpecFlag().add(SpecBlock.Flag.SPEC_STAGED_API);
+    }
+    private void createLibraries(PackageBlock packageBlock) {
+        LibraryBlock libraryBlock = packageBlock.getLibraryList().createNext();
+        LibraryInfo info1 = libraryBlock.createNext();
+        info1.setId(0x6e);
+        info1.setName("test.library.lib1");
+
+        LibraryInfo info2 = libraryBlock.createNext();
+        info2.setId(0x6f);
+        info2.setName("test.library.lib2");
+        Assert.assertEquals(2, libraryBlock.size());
+    }
+    private void createOverlayables(PackageBlock packageBlock) {
+        Overlayable overlayable1 = packageBlock.getOverlayableList().createNext();
+        overlayable1.setName("test.overlayable1.name");
+        overlayable1.setActor("test.overlayable1.actor");
+        OverlayablePolicy policy1 = overlayable1.createOverlayablePolicy();
+        policy1.setFlags(PolicyFlag.PUBLIC);
+        Iterator<ResourceEntry> iterator = packageBlock.getResources();
+        while (policy1.size() < 4 && iterator.hasNext()) {
+            policy1.createNext().set(iterator.next().getResourceId());
+        }
+
+        Overlayable overlayable2 = packageBlock.getOverlayableList().createNext();
+        overlayable2.setName("test.overlayable2.name");
+        overlayable2.setActor("test.overlayable2.actor");
+
+        OverlayablePolicy policy2 = overlayable2.createOverlayablePolicy();
+        policy2.setFlags(PolicyFlag.SIGNATURE);
+        while (policy2.size() < 3 && iterator.hasNext()) {
+            policy2.createNext().set(iterator.next().getResourceId());
+        }
+
+        OverlayablePolicy policy22 = overlayable2.createOverlayablePolicy();
+        policy22.setFlags(PolicyFlag.PRODUCT_PARTITION);
+        while (policy22.size() < 2 && iterator.hasNext()) {
+            policy22.createNext().set(iterator.next().getResourceId());
+        }
+
+        OverlayablePolicy policy23 = overlayable2.createOverlayablePolicy();
+        policy23.setFlags(PolicyFlag.ODM_PARTITION, PolicyFlag.OEM_PARTITION);
+
+        // add unknown PolicyFlag
+        policy23.setFlags(policy23.getFlags() | 0x55000000);
+
+        while (policy23.size() < 2 && iterator.hasNext()) {
+            policy23.createNext().set(iterator.next().getResourceId());
+        }
+        Assert.assertEquals(2, packageBlock.getOverlayableList().size());
+    }
+    private void createStageAlias(PackageBlock packageBlock) {
+        StagedAlias stagedAlias = packageBlock.getStagedAliasList().createNext();
+        StagedAliasEntry entry = stagedAlias.createNext();
+        entry.set(0x6f010000, packageBlock.getResources().next().getResourceId());
+        Assert.assertEquals(1, stagedAlias.size());
+        Assert.assertNotNull(packageBlock.getResource(0x6f010000));
     }
     private void addArrayBagStrings_1(PackageBlock packageBlock){
 
@@ -440,31 +566,31 @@ public class ApkModuleTest {
         Assert.assertNotNull(valueMap);
         valueMap.setArrayIndex(1);
         String text = "123";
-        valueMap.setValueAsString(text);
+        valueMap.setDataAsString(text);
 
         valueMap = mapArray.get(1);
         Assert.assertNotNull(valueMap);
         valueMap.setArrayIndex(2);
         text = "10.0dp";
-        valueMap.setValueAsString(text);
+        valueMap.setDataAsString(text);
 
         valueMap = mapArray.get(2);
         Assert.assertNotNull(valueMap);
         valueMap.setArrayIndex(3);
-        valueMap.setTypeAndData(ValueType.DEC, 123);
+        valueMap.setTypeAndData(DataType.DEC, 123);
 
         valueMap = mapArray.get(3);
         Assert.assertNotNull(valueMap);
         valueMap.setArrayIndex(4);
         text = "#ffaa00";
-        valueMap.setValueAsString(text);
+        valueMap.setDataAsString(text);
         entry.getResTableMapEntry().refresh();
 
         valueMap = mapArray.get(4);
         Assert.assertNotNull(valueMap);
         valueMap.setArrayIndex(5);
         text = "@string/app_name";
-        valueMap.setValueAsString(text);
+        valueMap.setDataAsString(text);
     }
     private void createAttrEntry(PackageBlock packageBlock){
         Entry entry = packageBlock
@@ -497,12 +623,12 @@ public class ApkModuleTest {
         ResValueMap valueMap = mapArray.createNext();
         valueMap.setArrayIndex(1);
 
-        valueMap.setValueAsString("@integer/value");
-        Assert.assertEquals("@integer/value", valueMap.getValueAsString());
+        valueMap.setDataAsString("@integer/value");
+        Assert.assertEquals("@integer/value", valueMap.getDataAsString());
 
         valueMap = mapArray.createNext();
         valueMap.setArrayIndex(2);
-        valueMap.setTypeAndData(ValueType.REFERENCE, appName.getResourceId());
+        valueMap.setTypeAndData(DataType.REFERENCE, appName.getResourceId());
 
         mapArray.refresh();
 
@@ -510,7 +636,7 @@ public class ApkModuleTest {
     private AndroidManifestBlock createManifest() throws IOException {
         FrameworkApk frameworkApk = AndroidFrameworks.getLatest();
         AndroidManifestBlock manifestBlock = new AndroidManifestBlock();
-        manifestBlock.setPackageName("com.reandroid.arsc");
+        manifestBlock.setPackageName(TestUtils.MAIN_PACKAGE_NAME);
         manifestBlock.setVersionCode(1);
         manifestBlock.setVersionName("1.0");
 
@@ -570,12 +696,12 @@ public class ApkModuleTest {
                 return false;
             }
             ResXmlAttribute attribute = element.searchAttributeByResourceId(AndroidManifest.ID_name);
-            return attribute != null && EMPTY_META_NAME.equals(attribute.getValueAsString());
+            return attribute != null && EMPTY_META_NAME.equals(attribute.getDataAsString());
         }));
         Assert.assertNotNull(metaData);
         ResXmlAttribute attribute = metaData.searchAttributeByResourceId(AndroidManifest.ID_value);
         Assert.assertNotNull(attribute);
-        Assert.assertEquals("Test empty attribute value failed ",StringsUtil.EMPTY, attribute.getValueAsString());
+        Assert.assertEquals("Test empty attribute value failed ",StringsUtil.EMPTY, attribute.getDataAsString());
 
         return manifestBlock;
     }
@@ -584,11 +710,52 @@ public class ApkModuleTest {
         ResXmlElement meta = application.newElement(AndroidManifest.TAG_meta_data);
         ResXmlAttribute name = meta.getOrCreateAndroidAttribute(AndroidManifest.NAME_name,
                 AndroidManifest.ID_name);
-        name.setValueAsString(EMPTY_META_NAME);
+        name.setDataAsString(EMPTY_META_NAME);
 
         ResXmlAttribute value = meta.getOrCreateAndroidAttribute(AndroidManifest.NAME_value,
                 AndroidManifest.ID_value);
-        value.setValueAsString(StringsUtil.EMPTY);
+        value.setDataAsString(StringsUtil.EMPTY);
+    }
+    private void addMorePackages(TableBlock tableBlock) {
+        PackageBlock main = tableBlock.pickOne();
+        PackageBlock packageBlock2 = tableBlock.newPackage(
+                main.getId() + 1, main.getName() + ".pkg2");
+        initPackage2(packageBlock2);
+        PackageBlock packageBlock3 = tableBlock.newPackage(
+                main.getId() + 2, main.getName() + ".pkg3");
+        initPackage3(packageBlock3);
+        Assert.assertEquals("Packages count", 3, tableBlock.size());
+    }
+    private void initPackage2(PackageBlock packageBlock) {
+        packageBlock.getOrCreate(
+                "", "string", "pkg2_string_entry_1")
+                .setDataAsString("Package-2 string entry-1");
+        packageBlock.getOrCreate(
+                "", "string", "pkg2_string_entry_2")
+                .setDataAsString("Package-2 string entry-2");
+    }
+    private void initPackage3(PackageBlock packageBlock) {
+        packageBlock.getOrCreate(
+                "", "integer", "pkg3_integer_entry_1")
+                .setDataAsDecimal(1);
+        packageBlock.getOrCreate(
+                "-en", "integer", "pkg3_integer_entry_1")
+                .setDataAsDecimal(2);
+        packageBlock.getOrCreate(
+                "-mdpi", "integer", "pkg3_integer_entry_1")
+                .setDataAsDecimal(3);
+
+        packageBlock.getOrCreate(
+                "", "string", "pkg3_string_entry_1")
+                .setDataAsString("Package-3 string entry-1 -default");
+        Entry entry = packageBlock.getOrCreate(
+                "-en", "string", "pkg3_string_entry_1");
+        entry.setDataAsString("Package-3 string entry-1 -en");
+        entry.getOrCreateSpecFlag().add(SpecBlock.Flag.SPEC_PUBLIC);
+
+        packageBlock.getOrCreate(
+                "-fr", "string", "pkg3_string_entry_1")
+                .setDataAsString("Package-3 string entry-1 -fr");
     }
     public static ApkModule getLastApkModule(){
         return last_apkModule;

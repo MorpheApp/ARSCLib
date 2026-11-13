@@ -77,7 +77,7 @@ public class SectionList extends FixedBlockContainer
 
         this.typeMap = new HashMap<>();
 
-        addChild(0, sectionArray);
+        setupBlock(0, sectionArray);
 
         this.dexHeader = dexHeader;
         this.mapList = mapList;
@@ -143,16 +143,16 @@ public class SectionList extends FixedBlockContainer
     }
 
     @Override
-    public void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         readSections(reader, null);
     }
     void readSections(BlockReader reader, Predicate<SectionType<?>> filter) throws IOException {
-        int position = reader.getPosition();
+        int position = reader.position();
         DexHeader header = getHeader();
         header.getOffsetReference().set(position);
         readSpecialSections(reader);
         readBody(reader, filter);
-        reader.seek(position + header.getFileSize());
+        reader.position(position + header.getFileSize());
     }
     private void readSpecialSections(BlockReader reader) throws IOException {
         getSection(SectionType.HEADER).readBytes(reader);
@@ -180,7 +180,11 @@ public class SectionList extends FixedBlockContainer
             add(section);
         }
         if (ownsSection(section)) {
-            section.readBytes(reader);
+            try {
+                section.readBytes(reader);
+            } catch (NullPointerException e) {
+                throw new IOException(section.getSectionType() + " " + e.getMessage(), e);
+            }
         } else {
             ensureMapList(section);
         }
@@ -276,7 +280,7 @@ public class SectionList extends FixedBlockContainer
             Section<?> section = iterator.next();
             section.onRemove(this);
         }
-        sectionArray.clearChildes();
+        sectionArray.clearBlocks();
         typeMap.clear();
     }
     public void clearPoolMap(SectionType<?> sectionType) {
@@ -428,7 +432,7 @@ public class SectionList extends FixedBlockContainer
     }
 
     public int indexOf(Section<?> section) {
-        return sectionArray.indexOf(section);
+        return sectionArray.indexOfIdentity(section);
     }
     @Override
     public Section<?> get(int i) {

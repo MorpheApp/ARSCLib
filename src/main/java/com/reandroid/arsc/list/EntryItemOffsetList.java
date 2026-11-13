@@ -42,7 +42,7 @@ public class EntryItemOffsetList extends OffsetReferenceList<OffsetItem> {
     }
 
     @Override
-    protected void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         int size = getCountReference().get();
         setSize(size);
         if (size == 0) {

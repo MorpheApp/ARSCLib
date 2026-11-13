@@ -15,65 +15,108 @@
  */
 package com.reandroid.arsc.header;
 
+import com.reandroid.arsc.base.Block;
+import com.reandroid.arsc.chunk.ChunkType;
 import com.reandroid.arsc.io.BlockReader;
-import com.reandroid.arsc.item.ByteArray;
+import com.reandroid.arsc.item.ByteItem;
+import com.reandroid.arsc.item.IntegerReference;
 import com.reandroid.common.FileChannelInputStream;
+import com.reandroid.utils.ObjectsUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class InfoHeader extends HeaderBlock{
-    public InfoHeader(short type) {
-        super(type);
+public class InfoHeader extends HeaderBlock {
+
+    public InfoHeader(int type) {
+        super(1, type);
+        setupBlock(3, new ByteItem());
     }
     public InfoHeader() {
-        this((short) 0);
+        this(0);
+    }
+
+    public int getId() {
+        return id().get();
+    }
+
+    public IntegerReference id() {
+        return block(3);
     }
 
     @Override
-    public int getMinimumSize(){
+    public int getMinimumSize() {
         return INFO_MIN_SIZE;
     }
 
     @Override
-    void initExtraBytes(ByteArray extraBytes, int difference){
+    boolean readExtraBytes() {
+        return false;
     }
+
     @Override
     public int countBytes() {
         return 8;
     }
 
+    public boolean isSpecOrType() {
+        ChunkType chunkType = getChunkType();
+        return chunkType == ChunkType.SPEC || chunkType == ChunkType.TYPE;
+    }
+
+    public void reset() {
+        type().set(0);
+        headerSize().set(0);
+        chunkSize().set(0);
+        id().set(0);
+    }
+
+    public boolean readInfo(BlockReader reader) {
+        reset();
+        boolean result = false;
+        int available = reader.available();
+        int min = getMinimumSize();
+        if (available >= min) {
+            int position = reader.position();
+            try {
+                Object[] blocks = blocks();
+                for (int i = 0; i < 3; i++) {
+                    ((Block) blocks[i]).readBytes(reader);
+                }
+                if (isSpecOrType() && available > min) {
+                    ((Block) blocks[3]).readBytes(reader);
+                }
+                result = true;
+            } catch (IOException ignored) {
+            }
+            reader.position(position);
+        }
+        return result;
+    }
 
     public static InfoHeader readHeaderBlock(File file) throws IOException {
         return readHeaderBlock(FileChannelInputStream.read(file, INFO_MIN_SIZE));
     }
     public static InfoHeader readHeaderBlock(InputStream inputStream) throws IOException {
-        InfoHeader infoHeader=new InfoHeader();
+        InfoHeader infoHeader = new InfoHeader();
         infoHeader.readBytes(inputStream);
         return infoHeader;
     }
-    public static InfoHeader readHeaderBlock(BlockReader blockReader) throws IOException {
-        InfoHeader infoHeader=new InfoHeader();
-        infoHeader.readBytes(blockReader);
-        return infoHeader;
+    public static InfoHeader readHeaderBlock(BlockReader reader) throws IOException {
+        return read(reader);
     }
     public static InfoHeader readHeaderBlock(byte[] bytes) throws IOException {
-        BlockReader reader = new BlockReader(bytes);
-        InfoHeader infoHeader = new InfoHeader();
-        infoHeader.readBytes(reader);
-        return infoHeader;
+        return read(new BlockReader(bytes));
     }
 
     public static InfoHeader read(BlockReader reader) throws IOException {
+        reader.reportProgress();
         InfoHeader infoHeader = new InfoHeader();
-        if(reader.available() < infoHeader.getMinimumSize()){
-            return null;
+        if (infoHeader.readInfo(reader)) {
+            return infoHeader;
         }
-        int pos = reader.getPosition();
-        infoHeader.readBytes(reader);
-        reader.seek(pos);
-        return infoHeader;
+        return ObjectsUtil.getNull();
     }
 
     public static final int INFO_MIN_SIZE = 8;

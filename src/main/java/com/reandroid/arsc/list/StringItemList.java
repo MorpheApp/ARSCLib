@@ -43,7 +43,7 @@ public class StringItemList<T extends StringItem> extends OffsetBlockList<T> imp
                           StringPoolHeader header,
                           OffsetReferenceList<?> offsetReferenceList,
                           StringCreator<? extends T> stringCreator) {
-        super(header.getStartStrings(), offsetReferenceList);
+        super(header.startStrings(), offsetReferenceList);
 
         this.alignment = alignment;
         this.header = header;
@@ -189,8 +189,8 @@ public class StringItemList<T extends StringItem> extends OffsetBlockList<T> imp
     }
 
     @Override
-    public void readChildes(BlockReader reader) throws IOException {
-        super.readChildes(reader);
+    public void readBlockElements(BlockReader reader) throws IOException {
+        super.readBlockElements(reader);
         resetCountBytes();
         mSortRequired = false;
     }

@@ -17,6 +17,7 @@ package com.reandroid.dex.ins;
 
 import com.reandroid.arsc.container.CountedBlockList;
 import com.reandroid.arsc.item.IntegerItem;
+import com.reandroid.arsc.item.IntegerReference;
 import com.reandroid.arsc.item.ShortItem;
 import com.reandroid.common.ArraySupplier;
 import com.reandroid.dex.program.InstructionLabelType;
@@ -34,22 +35,32 @@ import java.util.Iterator;
 
 public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
 
-    private final ShortItem elementCount;
-    final CountedBlockList<IntegerItem> elements;
-    final CountedBlockList<SparseSwitchEntryKey> keys;
-
     boolean mSortRequired;
 
     public InsSparseSwitchData() {
         super(3, Opcode.SPARSE_SWITCH_PAYLOAD);
-        this.elementCount = new ShortItem();
 
-        this.elements = new CountedBlockList<>(IntegerItem.CREATOR, elementCount);
-        this.keys = new CountedBlockList<>(SparseSwitchEntryKey.CREATOR, elementCount);
+        ShortItem elementCount = new ShortItem();
 
-        addChild(1, elementCount);
-        addChild(2, elements);
-        addChild(3, keys);
+        CountedBlockList<IntegerItem> elements = new CountedBlockList<>(IntegerItem.CREATOR, elementCount);
+        CountedBlockList<SparseSwitchEntryKey> keys = new CountedBlockList<>(SparseSwitchEntryKey.CREATOR, elementCount);
+
+        elements.setHasSameByteSizeEntries(true);
+        keys.setHasSameByteSizeEntries(true);
+        
+        setupBlock(1, elementCount);
+        setupBlock(2, elements);
+        setupBlock(3, keys);
+    }
+
+    public IntegerReference elementCount() {
+        return block(1);
+    }
+    public CountedBlockList<IntegerItem> elements() {
+        return block(2);
+    }
+    public CountedBlockList<SparseSwitchEntryKey> keys() {
+        return block(3);
     }
 
     @Override
@@ -61,18 +72,18 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         if (index < 0 || index >= size()) {
             return null;
         }
-        return new SparseSwitchEntry(this, elements.get(index), keys.get(index));
+        return new SparseSwitchEntry(this, elements().get(index), keys().get(index));
     }
     @Override
     public int size() {
-        return elements.size();
+        return elements().size();
     }
     @Override
     public void setSize(int size) {
         Object lock = requestLock();
-        elements.setSize(size);
-        keys.setSize(size);
-        elementCount.set(size);
+        elements().setSize(size);
+        keys().setSize(size);
+        elementCount().set(size);
         releaseLock(lock);
     }
     public boolean remove(SwitchEntry entry) {
@@ -81,9 +92,9 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         }
         SparseSwitchEntry switchEntry = (SparseSwitchEntry) entry;
         Object lock = requestLock();
-        boolean removed = this.elements.remove((IntegerItem) switchEntry.getElement());
+        boolean removed = this.elements().remove((IntegerItem) switchEntry.getElement());
         if (removed) {
-            this.keys.remove(switchEntry.getEntryKey());
+            this.keys().remove(switchEntry.getEntryKey());
         }
         releaseLock(lock);
         return removed;
@@ -94,10 +105,10 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         }
         this.mSortRequired = false;
         Comparator<IntegerItem> comparator = (item1, item2) -> CompareUtil.compare(item1.get(), item2.get());
-        if (!elements.needsSort(comparator)) {
+        if (!elements().needsSort(comparator)) {
             return;
         }
-        this.elements.sort(comparator, keys);
+        this.elements().sort(comparator, keys());
     }
     @Override
     public Iterator<SparseSwitchEntry> getLabels() {
@@ -133,15 +144,19 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
     public InsSparseSwitch getSwitch() {
         return (InsSparseSwitch) super.getSwitch();
     }
+
     @Override
-    protected void onPreRefresh() {
+    public void refresh() {
+        elements().refresh();
+        keys().refresh();
         sort();
-        super.onPreRefresh();
+        super.refresh();
     }
+
     void fromPackedSwitchData(PackedSwitchDataList packedSwitchDataList) {
         int length = packedSwitchDataList.size();
         setSize(length);
-        for(int i = 0; i < length; i++) {
+        for (int i = 0; i < length; i++) {
             get(i).fromPackedSwitch(packedSwitchDataList.get(i));
         }
     }
@@ -150,7 +165,7 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         InsSparseSwitchData switchData = (InsSparseSwitchData) ins;
         int size = switchData.size();
         this.setSize(size);
-        for(int i = 0; i < size; i++) {
+        for (int i = 0; i < size; i++) {
             get(i).merge(switchData.get(i));
         }
     }
@@ -161,7 +176,7 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         SmaliPayloadSparseSwitch smaliPayload = (SmaliPayloadSparseSwitch) smaliInstruction;
         int count = smaliPayload.getCount();
         this.setSize(count);
-        for(int i = 0; i < count; i++) {
+        for (int i = 0; i < count; i++) {
             get(i).fromSmali(smaliPayload.getEntry(i));
         }
         mSortRequired = true;
@@ -182,7 +197,7 @@ public class InsSparseSwitchData extends InsSwitchPayload<SparseSwitchEntry> {
         writer.append(getSmaliDirective().getName());
         int size = size();
         writer.indentPlus();
-        for(int i = 0; i < size; i++) {
+        for (int i = 0; i < size; i++) {
             get(i).append(writer);
         }
         writer.indentMinus();

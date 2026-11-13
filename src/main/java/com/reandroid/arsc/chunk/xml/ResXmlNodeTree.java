@@ -21,7 +21,10 @@ import com.reandroid.arsc.refactor.ResourceMergeOption;
 import com.reandroid.json.JSONArray;
 import com.reandroid.json.JSONException;
 import com.reandroid.json.JSONObject;
-import com.reandroid.utils.collection.*;
+import com.reandroid.utils.collection.CombiningIterator;
+import com.reandroid.utils.collection.InstanceIterator;
+import com.reandroid.utils.collection.IterableIterator;
+import com.reandroid.utils.collection.SingleIterator;
 import com.reandroid.xml.base.NodeTree;
 import org.xmlpull.v1.XmlSerializer;
 
@@ -103,7 +106,7 @@ public abstract class ResXmlNodeTree extends ResXmlNode implements NodeTree<ResX
     }
 
     public int indexOf(ResXmlNode resXmlNode) {
-        return getNodeList().indexOf(resXmlNode);
+        return getNodeList().indexOfIdentity(resXmlNode);
     }
     public void moveTo(ResXmlNode resXmlNode, int index) {
         getNodeList().moveTo(resXmlNode, index);
@@ -129,7 +132,7 @@ public abstract class ResXmlNodeTree extends ResXmlNode implements NodeTree<ResX
     }
     @Override
     public void clear() {
-        getNodeList().clearChildes();
+        getNodeList().clearBlocks();
     }
 
     @Override

@@ -142,14 +142,14 @@ public class MultiMap<K, V> {
             }
             if(obj.getClass() == EntryList.class) {
                 EntryList<?> entryList = (EntryList<?>) obj;
-                int i = entryList.indexOfExact(value);
+                int i = entryList.indexOfIdentity(value);
                 if(i < 0) {
                     return null;
                 }
                 obj = entryList.remove(i);
                 if(entryList.sortRequired) {
                     // Added again since the list was last read
-                    while((i = entryList.indexOfExact(value, i)) >= 0) {
+                    while((i = entryList.indexOfIdentity(value, i)) >= 0) {
                         entryList.remove(i);
                     }
                 }

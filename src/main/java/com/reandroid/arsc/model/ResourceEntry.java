@@ -19,14 +19,20 @@ import com.reandroid.arsc.base.Block;
 import com.reandroid.arsc.chunk.PackageBlock;
 import com.reandroid.arsc.chunk.TableBlock;
 import com.reandroid.arsc.container.SpecTypePair;
+import com.reandroid.arsc.item.SpecFlag;
 import com.reandroid.arsc.item.SpecString;
 import com.reandroid.arsc.value.Entry;
 import com.reandroid.arsc.value.ResConfig;
 import com.reandroid.arsc.value.ResValue;
-import com.reandroid.arsc.value.ValueType;
+import com.reandroid.arsc.value.DataType;
 import com.reandroid.arsc.value.attribute.AttributeBag;
 import com.reandroid.utils.HexUtil;
-import com.reandroid.utils.collection.*;
+import com.reandroid.utils.collection.CollectionUtil;
+import com.reandroid.utils.collection.ComputeIterator;
+import com.reandroid.utils.collection.EmptyIterator;
+import com.reandroid.utils.collection.FilterIterator;
+import com.reandroid.utils.collection.IterableIterator;
+import com.reandroid.utils.collection.SingleIterator;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
@@ -69,11 +75,11 @@ public class ResourceEntry implements Iterable<Entry> {
         if (resValue == null) {
             return EmptyIterator.of();
         }
-        ValueType valueType = resValue.getValueType();
-        if (valueType == ValueType.STRING) {
-            return SingleIterator.of(resValue.getValueAsString());
+        DataType dataType = resValue.getDataType();
+        if (dataType == DataType.STRING) {
+            return SingleIterator.of(resValue.getDataAsString());
         }
-        if (!valueType.isReference()) {
+        if (!dataType.isReference()) {
             return EmptyIterator.of();
         }
         TableBlock tableBlock = getPackageBlock().getTableBlock();
@@ -135,8 +141,8 @@ public class ResourceEntry implements Iterable<Entry> {
         if (resValue == null) {
             return this;
         }
-        ValueType valueType = resValue.getValueType();
-        if (valueType == null || !valueType.isReference()) {
+        DataType dataType = resValue.getDataType();
+        if (dataType == null || !dataType.isReference()) {
             return this;
         }
         int id = resValue.getData();
@@ -167,9 +173,10 @@ public class ResourceEntry implements Iterable<Entry> {
     }
     public Entry getOrCreate(ResConfig resConfig) {
         int resourceId = this.getResourceId();
-        byte typeId = (byte)((resourceId >> 16) & 0xff);
-        short entryId = (short)(resourceId & 0xffff);
-        Entry entry = getPackageBlock().getOrCreateEntry(typeId, entryId, resConfig);
+        Entry entry = getPackageBlock().getOrCreateEntry(
+                (resourceId >> 16) & 0xff,
+                resourceId & 0xffff,
+                resConfig);
         String name = getName();
         if (name != null && entry.getName() ==  null) {
             entry.setName(name, true);
@@ -350,7 +357,30 @@ public class ResourceEntry implements Iterable<Entry> {
         }
         return null;
     }
-
+    private Entry getNamedEntry() {
+        Iterator<Entry> iterator = iterator(false);
+        while (iterator.hasNext()) {
+            Entry entry = iterator.next();
+            if (entry.getName() != null) {
+                return entry;
+            }
+        }
+        return null;
+    }
+    public SpecFlag getSpecFlag() {
+        Entry entry = getNamedEntry();
+        if (entry != null) {
+            return entry.getSpecFlag();
+        }
+        return null;
+    }
+    public SpecFlag getOrCreateSpecFlag() {
+        Entry entry = getNamedEntry();
+        if (entry != null) {
+            return entry.getOrCreateSpecFlag();
+        }
+        return null;
+    }
     @Override
     public Iterator<Entry> iterator() {
         return iterator(true);
@@ -380,16 +410,16 @@ public class ResourceEntry implements Iterable<Entry> {
     public String buildReference(PackageBlock context) {
         return buildReference(context, null);
     }
-    public String buildReference(PackageBlock context, ValueType referenceType) {
+    public String buildReference(PackageBlock context, DataType referenceType) {
         StringBuilder builder = new StringBuilder();
         if (referenceType != null) {
-            if (referenceType == ValueType.REFERENCE) {
+            if (referenceType == DataType.REFERENCE) {
                 builder.append('@');
-            } else if (referenceType == ValueType.DYNAMIC_REFERENCE) {
+            } else if (referenceType == DataType.DYNAMIC_REFERENCE) {
                 builder.append("@@");
-            } else if (referenceType == ValueType.ATTRIBUTE) {
+            } else if (referenceType == DataType.ATTRIBUTE) {
                 builder.append('?');
-            } else if (referenceType == ValueType.DYNAMIC_ATTRIBUTE) {
+            } else if (referenceType == DataType.DYNAMIC_ATTRIBUTE) {
                 builder.append("??");
             }
         }
@@ -423,15 +453,22 @@ public class ResourceEntry implements Iterable<Entry> {
     }
 
     public boolean serializePublicXml(XmlSerializer serializer) throws IOException {
+        if (isStageAliasId()) {
+            return false;
+        }
         String name = getName();
         if (name == null) {
             return false;
         }
         serializer.text("\n  ");
         serializer.startTag(null, PackageBlock.TAG_public);
-        serializer.attribute(null, "id", getHexId());
-        serializer.attribute(null, "type", getType());
-        serializer.attribute(null, "name", name);
+        serializer.attribute(null, PackageBlock.ATTR_id, getHexId());
+        serializer.attribute(null, PackageBlock.ATTR_type, getType());
+        serializer.attribute(null, PackageBlock.ATTR_name, name);
+        SpecFlag specFlag = getSpecFlag();
+        if (specFlag != null && specFlag.hasFlags()) {
+            serializer.attribute(null, PackageBlock.ATTR_spec, specFlag.toHexString());
+        }
         serializer.endTag(null, PackageBlock.TAG_public);
         return true;
     }

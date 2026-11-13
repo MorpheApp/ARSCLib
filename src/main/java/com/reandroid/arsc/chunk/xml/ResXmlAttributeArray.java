@@ -38,6 +38,8 @@ import java.util.Iterator;
 public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
         implements JSONConvert<JSONArray> {
 
+    private boolean mPositionalAttributeChanged;
+
     public ResXmlAttributeArray(IntegerReference unitSize, IntegerReference countReference) {
         super(new AttributesCreator(unitSize), countReference);
     }
@@ -47,6 +49,7 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
     }
     @Override
     public boolean sort(Comparator<? super ResXmlAttribute> comparator) {
+        computePositionalAttributes();
         if (super.sort(comparator)) {
             getStartElement().refreshAttributePositions();
             return true;
@@ -55,11 +58,22 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
     }
 
     private void computePositionalAttributes() {
-        ResXmlStartElement startElement = getStartElement();
+        if (mPositionalAttributeChanged) {
+            mPositionalAttributeChanged = false;
+            ResXmlStartElement startElement = getStartElement();
 
-        startElement.getIdAttributePosition().computePosition();
-        startElement.getClassAttributePosition().computePosition();
-        startElement.getStyleAttributePosition().computePosition();
+            startElement.getIdAttributePosition().computePosition();
+            startElement.getClassAttributePosition().computePosition();
+            startElement.getStyleAttributePosition().computePosition();
+        }
+    }
+    public void onAttributeNameChanged(String oldName, int oldId, String name, int id) {
+        if (!mPositionalAttributeChanged) {
+            if (oldId != id || !ObjectsUtil.equals(oldName, name)) {
+                mPositionalAttributeChanged = ResXmlAttributePosition.isPositionalAttribute(name, id)
+                        || ResXmlAttributePosition.isPositionalAttribute(oldName, oldId);
+            }
+        }
     }
     private ResXmlAttributePosition getPosition(int positionType) {
         if (positionType != -1) {
@@ -125,7 +139,7 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
     }
 
     @Override
-    public void onReadBytes(BlockReader reader) throws IOException {
+    public void readBytes(BlockReader reader) throws IOException {
         int size = getCountReference().get();
         setSize(size);
         if (size != 0) {
@@ -133,21 +147,21 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
             for (int i = 0; i < size; i++) {
                 ResXmlAttribute attribute = get(i);
                 attribute.setAttributesUnitSize(unitSize);
-                int position = reader.getPosition();
+                int position = reader.position();
                 attribute.readBytes(reader);
-                reader.seek(position + unitSize);
+                reader.position(position + unitSize);
             }
         }
     }
     public void clear() {
-        clearChildes();
+        clearBlocks();
         updateCountReference();
     }
 
-    public ResXmlAttribute getOrCreateAndroidAttribute(String name, int resourceId){
+    public ResXmlAttribute getOrCreateAndroidAttribute(String name, int resourceId) {
         return getOrCreateAttribute(
-                Namespace.URI_ANDROID,
-                Namespace.PREFIX_ANDROID,
+                Namespace.Util.URI_ANDROID,
+                Namespace.Util.PREFIX_ANDROID,
                 name,
                 resourceId);
     }
@@ -170,13 +184,13 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
         }
         return attribute;
     }
-    private ResXmlAttribute searchAttribute(String name, int resourceId){
-        if(resourceId == 0){
+    private ResXmlAttribute searchAttribute(String name, int resourceId) {
+        if (resourceId == 0) {
             return searchAttributeByName(name);
         }
         return searchAttributeByResourceId(resourceId);
     }
-    public ResXmlAttribute searchAttributeByName(String name){
+    public ResXmlAttribute searchAttributeByName(String name) {
         if (name == null) {
             return null;
         }
@@ -185,7 +199,7 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
         for (int i = 0; i < size; i++) {
             ResXmlAttribute attribute = get(i);
             if (attribute.equalsName(name)) {
-                if(attribute.getNameId() != 0){
+                if (attribute.getNameId() != 0) {
                     withIdAttribute = attribute;
                     continue;
                 }
@@ -201,13 +215,13 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
         int size = size();
         for (int i = 0; i < size; i++) {
             ResXmlAttribute attribute = get(i);
-            if(resourceId == attribute.getNameId()){
+            if (resourceId == attribute.getNameId()) {
                 return attribute;
             }
         }
         return null;
     }
-    public ResXmlAttribute searchAttribute(String namespace, String name){
+    public ResXmlAttribute searchAttribute(String namespace, String name) {
         int size = size();
         for (int i = 0; i < size; i++) {
             ResXmlAttribute attribute = get(i);
@@ -265,7 +279,6 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
             for (int i = 0; i < length; i++) {
                 get(start + i).fromJson(json.getJSONObject(i));
             }
-            computePositionalAttributes();
             sort();
         }
     }
@@ -287,7 +300,7 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
             String prefix = XMLUtil.splitPrefix(name);
             name = XMLUtil.splitName(name);
             String value = parser.getAttributeValue(i);
-            if (Namespace.isValidNamespace(value, prefix)) {
+            if (Namespace.Util.isValidNamespace(value, prefix)) {
                 continue;
             }
             if (prefix == null) {
@@ -298,7 +311,7 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
                 uri = parser.getAttributeNamespace(i);
                 if (StringsUtil.isEmpty(uri)) {
                     ResXmlNamespace ns = element().getNamespaceForPrefix(prefix);
-                    if(ns != null){
+                    if (ns != null) {
                         uri = ns.getUri();
                     }
                 }
@@ -312,7 +325,6 @@ public class ResXmlAttributeArray extends CountedBlockList<ResXmlAttribute>
             }
         }
         if (count != 0) {
-            computePositionalAttributes();
             sort();
         }
     }

@@ -19,6 +19,7 @@ import com.reandroid.arsc.ApkFile;
 import com.reandroid.arsc.chunk.*;
 import com.reandroid.arsc.container.BlockList;
 import com.reandroid.arsc.header.HeaderBlock;
+import com.reandroid.arsc.header.InfoHeader;
 import com.reandroid.arsc.io.BlockReader;
 import com.reandroid.arsc.pool.ResXmlStringPool;
 import com.reandroid.common.BytesOutputStream;
@@ -33,15 +34,15 @@ public class ResXmlDocumentChunk extends Chunk<HeaderBlock> {
     private PackageBlock mPackageBlock;
 
     public ResXmlDocumentChunk() {
-        super(new HeaderBlock(ChunkType.XML),3);
+        super(3, new HeaderBlock(ChunkType.XML));
 
         this.mResXmlStringPool = new ResXmlStringPool(true);
         this.mResXmlIDMap = new ResXmlIDMap();
         this.mNodeList = new ResXmlNodeList();
 
-        addChild(mResXmlStringPool);
-        addChild(mResXmlIDMap);
-        addChild(mNodeList);
+        setupBlock(mResXmlStringPool);
+        setupBlock(mResXmlIDMap);
+        setupBlock(mNodeList);
     }
 
     public BlockList<ResXmlNode> getNodeListBlockInternal() {
@@ -66,8 +67,8 @@ public class ResXmlDocumentChunk extends Chunk<HeaderBlock> {
         return outputStream.toByteArray();
     }
     @Override
-    public void onReadBytes(BlockReader reader) throws IOException {
-        HeaderBlock headerBlock = reader.readHeaderBlock();
+    public void readBytes(BlockReader reader) throws IOException {
+        HeaderBlock headerBlock = InfoHeader.read(reader);
         if(headerBlock == null){
             throw new IOException("Not bin xml: " + reader);
         }
@@ -108,8 +109,8 @@ public class ResXmlDocumentChunk extends Chunk<HeaderBlock> {
         if(!reader.isAvailable()){
             return false;
         }
-        int position = reader.getPosition();
-        HeaderBlock headerBlock = reader.readHeaderBlock();
+        int position = reader.position();
+        HeaderBlock headerBlock = InfoHeader.read(reader);
         if (headerBlock == null) {
             return false;
         }
@@ -135,7 +136,7 @@ public class ResXmlDocumentChunk extends Chunk<HeaderBlock> {
             logUnknownChunkOnce(headerBlock);
             document().newUnknown(chunkType).readBytes(reader);
         }
-        return reader.isAvailable() && position != reader.getPosition();
+        return reader.isAvailable() && position != reader.position();
     }
     public ResXmlStringPool getStringPool(){
         return mResXmlStringPool;

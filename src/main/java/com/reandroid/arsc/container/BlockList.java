@@ -17,10 +17,11 @@ package com.reandroid.arsc.container;
 
 import com.reandroid.arsc.base.Block;
 import com.reandroid.arsc.base.BlockCounter;
-import com.reandroid.arsc.base.BlockLocator;
 import com.reandroid.arsc.base.BlockRefresh;
 import com.reandroid.arsc.base.Creator;
+import com.reandroid.arsc.base.BlockLocator;
 import com.reandroid.arsc.io.BlockReader;
+import com.reandroid.common.Mergeable;
 import com.reandroid.json.JSONArray;
 import com.reandroid.json.JSONConvert;
 import com.reandroid.utils.ObjectsUtil;
@@ -39,6 +40,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     
     private ArrayCollection<T> mItems;
     private Creator<? extends T> mCreator;
+    private boolean mSameByteSizeEntries;
 
     public BlockList(Creator<? extends T> creator) {
         super();
@@ -177,20 +179,16 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     public Iterator<T> reversedIterator() {
         return mItems.reversedIterator();
     }
-    public int lastIndexOf(T item) {
-        return mItems.lastIndexOf(item);
-    }
 
     public int countIf(Predicate<? super T> predicate) {
         return mItems.count(predicate);
     }
-    public int countFromLast(Predicate<? super T> predicate) {
-        return mItems.countFromLast(predicate);
-    }
+
     public ArrayCollection<T> subListIf(Predicate<? super T> predicate) {
         return mItems.subListIf(predicate);
     }
-    public void clearChildes() {
+
+    public void clearBlocks() {
         if (mItems.isEmpty()) {
             return;
         }
@@ -323,10 +321,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (item == null) {
             return false;
         }
-        int index = mItems.indexOfExact(item, item.getIndex());
-        if (index < 0) {
-            index = mItems.indexOfExact(item);
-        }
+        int index = indexOfIdentity(item);
         if (index < 0) {
             return false;
         }
@@ -341,15 +336,45 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         onRemoveRequestCompleted(lock);
         return removed;
     }
-    public int indexOf(T item) {
+
+    public int indexOfIdentity(Block item) {
         if (item == null) {
             return -1;
         }
-        int index = mItems.indexOfExact(item, item.getIndex());
-        if (index < 0) {
-            index = mItems.indexOfExact(item);
+        ArrayCollection<T> itemsList = this.mItems;
+        int size = itemsList.size();
+        if (size == 0) {
+            return -1;
         }
-        return index;
+        int index = item.getIndex();
+        if (index >= 0 && index < size) {
+            if (item == itemsList.get(index)) {
+                return index;
+            }
+        }
+        return itemsList.indexOfIdentity(item);
+    }
+
+    @SuppressWarnings("all")
+    public int indexOf(Object item) {
+        if (item == null) {
+            return -1;
+        }
+        ArrayCollection<T> itemsList = this.mItems;
+        int size = itemsList.size();
+        if (size == 0) {
+            return -1;
+        }
+        if (item instanceof Block) {
+            Block block = (Block) item;
+            int index = block.getIndex();
+            if (index >= 0 && index < size) {
+                if (item.equals(itemsList.get(index))) {
+                    return index;
+                }
+            }
+        }
+        return itemsList.indexOf(item);
     }
     protected void notifyPreRemove(T item) {
         if (item != null && item.getParent() == this) {
@@ -399,7 +424,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (index < 0) {
             index = 0;
         }
-        int i = mItems.indexOfExact(item, item.getIndex());
+        int i = mItems.indexOfIdentity(item, item.getIndex());
         Object lock = onRemoveRequestStarted();
         mItems.move(item, index);
         updateIndex(i, index);
@@ -409,7 +434,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (item == null || destination == null || destination == this) {
             return false;
         }
-        int i = mItems.indexOfExact(item, item.getIndex());
+        int i = mItems.indexOfIdentity(item, item.getIndex());
         if (i < 0) {
             return false;
         }
@@ -469,7 +494,10 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         item.setIndex(index);
         item.setParent(this);
         mItems.add(index, item);
-        updateIndex(index);
+        int size = mItems.size();
+        if (index < size - 1) {
+            updateIndex(index, size);
+        }
         onChanged();
     }
     private boolean updateIndex() {
@@ -493,7 +521,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (end > count) {
             end = count;
         }
-        List<T> items = this.getChildes();
+        List<T> items = this.mItems;
         for (int i = start; i < end; i++) {
             T item = items.get(i);
             if (item != null && item.getIndex() != i) {
@@ -544,11 +572,15 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
             lockList();
         }
     }
+
     public boolean contains(Object obj) {
-        return mItems.contains(obj);
+        return indexOf(obj) >= 0;
     }
-    public boolean containsExact(Object obj) {
-        return mItems.containsExact(obj);
+    public boolean containsIdentity(Object obj) {
+        if (obj instanceof Block) {
+            return indexOfIdentity((Block) obj) >= 0;
+        }
+        return false;
     }
     public Object[] toArray() {
         return mItems.toArray();
@@ -607,7 +639,7 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         }
         trimToSize();
         onPreRefresh();
-        refreshChildes();
+        refreshBlockElements();
         onRefreshed();
         onChanged();
     }
@@ -619,10 +651,11 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     public void onChanged() {
         mItems.onChanged();
     }
-    protected void refreshChildes() {
-        Iterator<?> iterator = iterator();
-        while (iterator.hasNext()) {
-            Object item = iterator.next();
+    protected void refreshBlockElements() {
+        ArrayCollection<T> list = this.mItems;
+        int size = list.size();
+        for (int i = 0; i < size; i++) {
+            Object item = list.get(i);
             if (item instanceof BlockRefresh) {
                 ((BlockRefresh) item).refresh();
             }
@@ -631,9 +664,10 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     @Override
     public byte[] getBytes() {
         byte[] results = null;
-        Iterator<T> iterator = iterator();
-        while (iterator.hasNext()) {
-            T item = iterator.next();
+        ArrayCollection<T> list = this.mItems;
+        int size = list.size();
+        for (int i = 0; i < size; i++) {
+            T item = list.get(i);
             if (item != null) {
                 results = addBytes(results, item.getBytes());
             }
@@ -642,15 +676,19 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
     }
     @Override
     public int countBytes() {
+        return countElementBytes();
+    }
+    public int countElementBytes() {
         int result = 0;
-        int size = size();
+        ArrayCollection<T> list = this.mItems;
+        int size = list.size();
         if (size != 0) {
-            if (hasSimilarEntries()) {
+            if (hasSameByteSizeEntries()) {
                 T first = getFirst();
                 result = (first != null) ? size * first.countBytes() : 0;
             } else {
                 for (int i = 0; i < size; i++) {
-                    T item = get(i);
+                    T item = list.get(i);
                     if (item != null) {
                         result += item.countBytes();
                     }
@@ -672,11 +710,15 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         }
         if (skipIndividualCounting(counter)) {
             counter.addCount(countBytes());
-            return;
+        } else {
+            onCountUpToEntries(counter);
         }
-        int size = size();
+    }
+    public void onCountUpToEntries(BlockCounter counter) {
+        ArrayCollection<T> list = this.mItems;
+        int size = list.size();
         for (int i = 0; i < size && !counter.FOUND; i++) {
-            T item = get(i);
+            T item = list.get(i);
             if (item == null) {
                 continue;
             }
@@ -694,33 +736,38 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         if (end == null) {
             return true;
         }
-        if (!hasSimilarEntries()) {
+        if (!hasSameByteSizeEntries()) {
             return false;
         }
         T first = getFirst();
         return first != null && first.getClass() != end.getClass();
     }
-    protected boolean hasSimilarEntries() {
-        return false;
+    protected boolean hasSameByteSizeEntries() {
+        return mSameByteSizeEntries;
     }
-    public void readChildes(BlockReader reader) throws IOException{
+    public void setHasSameByteSizeEntries(boolean value) {
+        this.mSameByteSizeEntries = value;
+    }
+
+    public void readBlockElements(BlockReader reader) throws IOException {
         int size = this.size();
         for (int i = 0; i < size; i++) {
-            T item = get(i);
-            item.readBytes(reader);
+            get(i).readBytes(reader);
         }
         onChanged();
     }
     @Override
     protected int onWriteBytes(OutputStream stream) throws IOException {
         int result = 0;
-        int size = size();
-        for (int i = 0; i < size; i++) {
-            T item = get(i);
-            if (item == null) {
-                continue;
+        if (!isNull()) {
+            ArrayCollection<T> list = mItems;
+            int size = list.size();
+            for (int i = 0; i < size; i++) {
+                T item = list.get(i);
+                if (item != null) {
+                    result += item.writeBytes(stream);
+                }
             }
-            result += item.writeBytes(stream);
         }
         return result;
     }
@@ -776,6 +823,27 @@ public class BlockList<T extends Block> extends Block implements BlockRefresh, S
         blockList.setSize(size);
         for (int i = 0; i < size; i++) {
             blockList.get(i).fromJson(ObjectsUtil.cast(jsonArray.get(i)));
+        }
+    }
+
+    public static void mergeList(BlockList<?> destination,
+                                 BlockList<?> source) {
+        if (source == null || source == destination) {
+            return;
+        }
+        BlockList<? extends Mergeable<Block>> destinationList = ObjectsUtil.cast(destination);
+        BlockList<? extends Mergeable<Block>> sourceList = ObjectsUtil.cast(source);
+        int size = sourceList.size();
+        if (destinationList.size() == 0) {
+            destinationList.setSize(size);
+            for (int i = 0; i < size; i++) {
+                destinationList.get(i).merge(sourceList.get(i));
+            }
+        } else {
+            destinationList.ensureCapacity(size);
+            for (int i = 0; i < size; i++) {
+                destinationList.createNext().merge(sourceList.get(i));
+            }
         }
     }
 

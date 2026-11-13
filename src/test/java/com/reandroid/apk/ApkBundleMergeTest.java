@@ -51,8 +51,8 @@ public class ApkBundleMergeTest {
     private static ApkModule createBase() throws IOException {
         TableBlock tableBlock = new TableBlock();
         PackageBlock packageBlock = tableBlock.newPackage(0x7f, PACKAGE);
-        packageBlock.getOrCreate("", "string", "hello").setValueAsString("Hello");
-        packageBlock.getOrCreate("", "string", "base_only").setValueAsString("Only in base");
+        packageBlock.getOrCreate("", "string", "hello").setDataAsString("Hello");
+        packageBlock.getOrCreate("", "string", "base_only").setDataAsString("Only in base");
         tableBlock.refreshFull();
         return createModule("base", tableBlock, null);
     }
@@ -61,7 +61,7 @@ public class ApkBundleMergeTest {
         TableBlock tableBlock = new TableBlock();
         PackageBlock packageBlock = tableBlock.newPackage(0x7f, PACKAGE);
         // Created first, so it gets the id "hello" has in the base
-        packageBlock.getOrCreate("-de", "string", "hello").setValueAsString("Hallo");
+        packageBlock.getOrCreate("-de", "string", "hello").setDataAsString("Hallo");
         tableBlock.refreshFull();
         return createModule("split_config.de", tableBlock, "config.de");
     }
@@ -89,6 +89,6 @@ public class ApkBundleMergeTest {
     private static String value(PackageBlock packageBlock, String qualifiers, String name) {
         Entry entry = packageBlock.getEntry(qualifiers, "string", name);
         Assert.assertNotNull(qualifiers + "/" + name, entry);
-        return entry.getResValue().getValueAsString();
+        return entry.getResValue().getDataAsString();
     }
 }

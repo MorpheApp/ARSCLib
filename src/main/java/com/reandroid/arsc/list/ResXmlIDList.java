@@ -62,11 +62,11 @@ public class ResXmlIDList extends CountedBlockList<ResXmlID> {
         return count;
     }
     public void clear() {
-        super.clearChildes();
+        super.clearBlocks();
     }
 
     @Override
-    protected boolean hasSimilarEntries() {
+    protected boolean hasSameByteSizeEntries() {
         return true;
     }
 

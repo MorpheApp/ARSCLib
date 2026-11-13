@@ -96,7 +96,7 @@ public class DexContainerBlock extends BlockList<DexLayoutBlock> implements
         }
     }
     public void clear() {
-        clearChildes();
+        clearBlocks();
     }
 
     @Override
@@ -111,8 +111,8 @@ public class DexContainerBlock extends BlockList<DexLayoutBlock> implements
         notifyAdded(item);
     }
     @Override
-    public void clearChildes() {
-        super.clearChildes();
+    public void clearBlocks() {
+        super.clearBlocks();
         notifyLayoutsCleared();
     }
 
@@ -231,11 +231,11 @@ public class DexContainerBlock extends BlockList<DexLayoutBlock> implements
     }
 
     @Override
-    protected void onReadBytes(BlockReader reader) throws IOException {
-        readChildes(reader);
+    public void readBytes(BlockReader reader) throws IOException {
+        readBlockElements(reader);
     }
     @Override
-    public void readChildes(BlockReader reader) throws IOException {
+    public void readBlockElements(BlockReader reader) throws IOException {
         readBytes(reader, null);
     }
     public void readBytes(BlockReader reader, Predicate<SectionType<?>> filter) throws IOException {
@@ -307,7 +307,7 @@ public class DexContainerBlock extends BlockList<DexLayoutBlock> implements
         combineFrom(MergeOptions.DEFAULT, layoutBlock);
     }
     public void combineFrom(MergeOptions options, DexLayoutBlock layoutBlock) {
-        if (containsExact(layoutBlock) || layoutBlock.isEmpty()) {
+        if (containsIdentity(layoutBlock) || layoutBlock.isEmpty()) {
             return;
         }
         DexLayoutBlock destination = getLast();
