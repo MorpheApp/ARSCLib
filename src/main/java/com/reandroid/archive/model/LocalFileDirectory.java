@@ -21,6 +21,7 @@ import com.reandroid.archive.block.*;
 import com.reandroid.archive.block.ApkSignatureBlock;
 import com.reandroid.archive.io.ZipInput;
 import com.reandroid.arsc.io.BlockReader;
+import com.reandroid.common.FileChannelInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LocalFileDirectory {
+    private static final int HEADER_BUFFER_SIZE = 1024 * 4;
     private final CentralFileDirectory centralFileDirectory;
     private final List<LocalFileHeader> headerList;
     private ApkSignatureBlock apkSignatureBlock;
@@ -46,10 +48,20 @@ public class LocalFileDirectory {
         CentralFileDirectory centralFileDirectory = getCentralFileDirectory();
         long length = zipInput.getLength();
         InputStream inputStream = zipInput.getInputStream(0, length);
+        // Headers lie apart, so a small buffer reads little of the data between them.
+        FileChannelInputStream channelStream = null;
+        if (inputStream instanceof FileChannelInputStream) {
+            channelStream = new FileChannelInputStream(((FileChannelInputStream) inputStream).getFileChannel(), length, HEADER_BUFFER_SIZE);
+            inputStream = channelStream;
+        }
         for(CentralEntryHeader ceh : centralFileDirectory.getHeaderList()){
             offset = ceh.getLocalRelativeOffset();
-            inputStream.reset();
-            offset = inputStream.skip(offset);
+            if (channelStream != null) {
+                channelStream.seek(offset);
+            } else {
+                inputStream.reset();
+                offset = inputStream.skip(offset);
+            }
             LocalFileHeader lfh = LocalFileHeader.read(inputStream);
             if(lfh == null){
                 throw new ArchiveException("Error reading LFH at "
@@ -60,11 +72,11 @@ public class LocalFileDirectory {
 
             lfh.setCentralEntryHeader(ceh);
 
-            inputStream.skip(lfh.getDataSize());
-
+            long dataSize = lfh.getDataSize();
             lfh.updateDataDescriptor();
             DataDescriptor dataDescriptor = lfh.getDataDescriptor();
             if(dataDescriptor != null) {
+                inputStream.skip(dataSize);
                 int read = dataDescriptor.readBytes(inputStream);
                 if(read != dataDescriptor.countBytes()) {
                     lfh.setHasDataDescriptor(false);

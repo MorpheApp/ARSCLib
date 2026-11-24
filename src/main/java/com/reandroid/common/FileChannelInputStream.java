@@ -189,6 +189,9 @@ public class FileChannelInputStream extends InputStream {
         if(availableChannel > remaining){
             availableChannel = remaining;
         }
+        // The buffer is behind the new position, and nothing in it is read anymore
+        bufferPosition = 0;
+        bufferLength = 0;
         position += availableChannel;
         remaining = remaining - availableChannel;
         amount = amount - remaining;
@@ -227,6 +230,20 @@ public class FileChannelInputStream extends InputStream {
         position = 0;
         bufferPosition = bufferLength;
         fileChannel.position(startOffset);
+    }
+    /**
+     * Moves to a position from the start of the stream, keeping the buffer if it holds the position.
+     */
+    public void seek(long target) throws IOException {
+        long bufferStart = position - bufferPosition;
+        if (target >= bufferStart && target < bufferStart + bufferLength) {
+            bufferPosition = (int) (target - bufferStart);
+        } else {
+            bufferPosition = 0;
+            bufferLength = 0;
+            fileChannel.position(startOffset + target);
+        }
+        position = target;
     }
     @Override
     public int available(){
