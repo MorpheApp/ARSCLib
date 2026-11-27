@@ -273,7 +273,7 @@ public abstract class InputSource {
             return -1;
         }
         int sort1 = source1.getSort();
-        int sort2 = source1.getSort();
+        int sort2 = source2.getSort();
         if(sort1 == -1 && sort2 == -1){
             return compareAlias(source1, source2);
         }
